@@ -1,0 +1,105 @@
+name: "Setup PHP"
+description: "Action to setup PHP and install dependencies with Composer."
+author: Hoverkraft
+branding:
+  icon: settings
+  color: gray-dark
+
+inputs:
+  dependencies-cache:
+    description: "List of dependencies for which the cache should be managed"
+    required: false
+    default: ""
+  working-directory:
+    description: |
+      Working directory where the dependencies are installed.
+      Can be absolute or relative to the repository root.
+    required: false
+    default: "."
+
+outputs:
+  run-script-command:
+    description: "The command to run a script in the composer.json file"
+    value: ${{ steps.get-package-manager.outputs.run-script-command }}
+runs:
+  using: "composite"
+  steps:
+    - shell: bash
+      # FIXME: workaround until will be merged: https://github.com/actions/runner/pull/1684
+      run: mkdir -p ./self-setup-php-action/ && cp -r $GITHUB_ACTION_PATH/../* ./self-setup-php-action/
+
+    - id: get-package-manager
+      uses: ./self-setup-php-action/get-package-manager
+      with:
+        working-directory: ${{ inputs.working-directory }}
+
+    - id: get-php-version
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
+      env:
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+      with:
+        # jscpd:ignore-start
+        script: |
+          const path = require('node:path');
+          const fs = require('node:fs');
+
+          let workingDirectory = process.env.WORKING_DIRECTORY || '.';
+          if (!path.isAbsolute(workingDirectory)) {
+            workingDirectory = path.join(process.env.GITHUB_WORKSPACE, workingDirectory);
+          }
+
+          if (!fs.existsSync(workingDirectory)) {
+            core.setFailed(`The specified working directory does not exist: ${workingDirectory}`);
+            return;
+          }
+
+          workingDirectory = path.resolve(workingDirectory);
+          core.debug(`Running in working directory: ${workingDirectory}`);
+          process.chdir(workingDirectory);
+
+          // Try to read PHP version from composer.json
+          const composerJsonPath = path.join(workingDirectory, 'composer.json');
+          if (fs.existsSync(composerJsonPath)) {
+            try {
+              const composerJson = JSON.parse(fs.readFileSync(composerJsonPath, 'utf8'));
+              const phpRequirement = composerJson?.require?.php;
+              
+              if (phpRequirement) {
+                // Extract version number from requirement like "^8.1" or ">=8.0"
+                const versionMatch = phpRequirement.match(/(\d+\.\d+)/);
+                if (versionMatch) {
+                  core.setOutput('php-version', versionMatch[1]);
+                  return;
+                }
+              }
+            } catch (error) {
+              core.warning(`Failed to parse composer.json: ${error.message}`);
+            }
+          }
+
+          // Default to PHP 8.1
+          core.setOutput('php-version', '8.1');
+        # jscpd:ignore-end
+
+    - uses: shivammathur/setup-php@d70b0f44929b3b4056f47f7d3ea7e66cd9e8ae4c # v2.31.5
+      with:
+        php-version: ${{ steps.get-php-version.outputs.php-version }}
+        tools: composer
+        cache: composer
+        cache-dependency-path: ${{ steps.get-package-manager.outputs.cache-dependency-path }}
+
+    - shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: ${{ steps.get-package-manager.outputs.install-command }}
+
+    - if: inputs.dependencies-cache != ''
+      uses: ./self-setup-php-action/dependencies-cache
+      with:
+        dependencies: ${{ inputs.dependencies-cache }}
+        working-directory: ${{ inputs.working-directory }}
+
+    # FIXME: workaround until will be merged: https://github.com/actions/runner/pull/1684
+    - shell: bash
+      if: always()
+      run: |
+        rm -fr ./self-setup-php-action

@@ -1,0 +1,39 @@
+{
+  "name": "hoverkraft/test-ci-composer",
+  "description": "Test project for PHP CI workflow",
+  "type": "library",
+  "require": {
+    "php": "^8.1"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^10.0",
+    "phpstan/phpstan": "^1.10",
+    "friendsofphp/php-cs-fixer": "^3.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "TestCi\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "TestCi\\Tests\\": "tests/"
+    }
+  },
+  "scripts": {
+    "lint": [
+      "@phpstan",
+      "@php-cs-fixer"
+    ],
+    "phpstan": "phpstan analyse src --level=max --no-progress",
+    "php-cs-fixer": "php-cs-fixer fix --dry-run --diff --verbose",
+    "build": "mkdir -p dist && echo \"build test\" > dist/test.txt && echo \"✓ Build completed\"",
+    "test": "phpunit",
+    "test:coverage": "phpunit --coverage-clover=coverage/clover.xml"
+  },
+  "config": {
+    "allow-plugins": {
+      "phpstan/extension-installer": true
+    }
+  }
+}

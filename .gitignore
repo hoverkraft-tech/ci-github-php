@@ -1,0 +1,37 @@
+# Composer
+vendor/
+composer.phar
+
+# PHPUnit
+.phpunit.cache/
+
+# Test project specific - keep phpunit.xml
+!/tests/**/phpunit.xml
+
+# PHPStan
+.phpstan.cache/
+
+# Psalm
+.psalm.cache/
+
+# PHP CS Fixer
+.php-cs-fixer.cache
+
+# Build artifacts
+dist/
+build/
+coverage/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Workflow self-reference
+self-workflow/
