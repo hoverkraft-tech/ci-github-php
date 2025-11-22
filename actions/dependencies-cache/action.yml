@@ -1,0 +1,78 @@
+name: "Dependencies cache"
+description: "Action to setup dependencies cache management for PHP."
+author: Hoverkraft
+branding:
+  icon: archive
+  color: gray-dark
+
+inputs:
+  dependencies:
+    description: "List of dependencies for which the cache should be managed."
+    required: true
+  working-directory:
+    description: |
+      Working directory where the dependencies are installed.
+      Can be absolute or relative to the repository root.
+    required: false
+    default: "."
+
+runs:
+  using: "composite"
+  steps:
+    - shell: bash
+      # FIXME: workaround until will be merged: https://github.com/actions/runner/pull/1684
+      run: mkdir -p ./self-dependencies-cache-action/ && cp -r $GITHUB_ACTION_PATH/../* ./self-dependencies-cache-action/
+
+    - id: has-installed-dependencies
+      if: inputs.dependencies != ''
+      uses: ./self-dependencies-cache-action/has-installed-dependencies
+      with:
+        dependencies: ${{ inputs.dependencies }}
+        working-directory: ${{ inputs.working-directory }}
+
+    - id: get-package-manager
+      uses: ./self-dependencies-cache-action/get-package-manager
+      with:
+        working-directory: ${{ inputs.working-directory }}
+
+    - name: ♻️ PHPUnit cache
+      if: fromJson(steps.has-installed-dependencies.outputs.installed-dependencies).phpunit == true
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ${{ inputs.working-directory }}/.phpunit.cache
+        key: ${{ runner.os }}-cache-phpunit-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-cache-phpunit-
+
+    - name: ♻️ PHPStan cache
+      if: fromJson(steps.has-installed-dependencies.outputs.installed-dependencies).phpstan == true
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ${{ inputs.working-directory }}/.phpstan.cache
+        key: ${{ runner.os }}-cache-phpstan-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-cache-phpstan-
+
+    - name: ♻️ Psalm cache
+      if: fromJson(steps.has-installed-dependencies.outputs.installed-dependencies).psalm == true
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ${{ inputs.working-directory }}/.psalm.cache
+        key: ${{ runner.os }}-cache-psalm-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-cache-psalm-
+
+    - name: ♻️ PHP CS Fixer cache
+      if: fromJson(steps.has-installed-dependencies.outputs.installed-dependencies).php-cs-fixer == true
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      with:
+        path: ${{ inputs.working-directory }}/.php-cs-fixer.cache
+        key: ${{ runner.os }}-cache-php-cs-fixer-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-cache-php-cs-fixer-
+
+    # FIXME: workaround until will be merged: https://github.com/actions/runner/pull/1684
+    - shell: bash
+      if: always()
+      run: |
+        rm -fr ./self-dependencies-cache-action

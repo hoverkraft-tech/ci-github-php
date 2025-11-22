@@ -1,0 +1,28 @@
+name: Internal - Common Continuous Integration tasks
+
+on:
+  workflow_call:
+
+permissions: {}
+
+jobs:
+  linter:
+    uses: hoverkraft-tech/ci-github-common/.github/workflows/linter.yml@753288393de1f3d92f687a6761d236ca800f5306 # 0.28.1
+    permissions:
+      contents: read
+      statuses: write
+      actions: read
+      security-events: write
+
+  test-workflow-continuous-integration:
+    name: Test workflow "continuous-integration"
+    needs: linter
+    uses: ./.github/workflows/__test-workflow-continuous-integration.yml
+    permissions:
+      contents: read
+      packages: write
+      pull-requests: write
+      id-token: write
+      issues: read
+      security-events: write
+    secrets: inherit
