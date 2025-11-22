@@ -5,10 +5,11 @@ This action tests PHP projects with support for coverage reporting and pull requ
 ## Features
 
 - 🧪 Executes test command via Composer
-- 📊 Auto-detects and processes code coverage reports
+- 📊 Auto-detects and processes test and coverage reports via [parse-ci-reports](https://github.com/hoverkraft-tech/ci-github-common/tree/main/actions/parse-ci-reports)
 - 💬 Adds coverage summaries to pull requests
 - 🔄 Supports multiple coverage reporters (GitHub, Codecov)
 - 🐳 Supports running in Docker containers
+- 🗺️ Path mapping support for containerized environments
 
 ## Usage
 
@@ -17,6 +18,7 @@ This action tests PHP projects with support for coverage reporting and pull requ
   with:
     working-directory: "."
     coverage: "github"
+    command: "test:ci"
     github-token: ${{ github.token }}
 ```
 
@@ -26,8 +28,10 @@ This action tests PHP projects with support for coverage reporting and pull requ
 | -------------------- | --------------------------------------------------------------------------- | -------- | ------- |
 | `working-directory`  | Working directory where test commands are executed. Can be absolute or relative to the repository root. | No | `.` |
 | `container`          | Whether running in container mode (skips checkout and PHP setup)           | No       | `false` |
+| `command`            | Composer script command to run for testing. Should generate test and coverage reports in standard formats. | No | `test:ci` |
 | `coverage`           | Code coverage reporter to use. Supported values: `github`, `codecov`, or empty string to disable | No | `github` |
-| `coverage-files`     | Path to coverage files for reporting. Supports Cobertura, Clover formats. Can be a single file or multiple files separated by semicolons. | No | `` |
+| `report-file`        | Optional test and coverage report paths. Supports multiple formats. When omitted, uses "auto:test,auto:coverage" detection. | No | `` |
+| `path-mapping`       | Optional path mapping to adjust file paths in reports. Format: "container_path:repo_path,..." | No | `` |
 | `github-token`       | GitHub token for coverage PR comments. Required when coverage is set to `github`. | No | `` |
 
 ## How It Works
@@ -37,31 +41,24 @@ This action tests PHP projects with support for coverage reporting and pull requ
    - Configures caching for PHPUnit
 
 2. **Run Tests**:
-   - Executes `composer test` command
+   - Executes `composer {command}` (default: `composer test:ci`)
    - Captures exit code and output
 
 3. **Coverage Processing** (if enabled):
-   - Auto-detects coverage files (clover.xml, coverage.xml, etc.)
-   - Generates coverage report with ReportGenerator (for GitHub)
+   - Uses [parse-ci-reports](https://github.com/hoverkraft-tech/ci-github-common/tree/main/actions/parse-ci-reports) action to auto-detect and process test/coverage reports
+   - Supports multiple report formats (Cobertura, Clover, JUnit, etc.)
+   - Generates coverage summary and adds to PR (for GitHub)
    - Uploads to Codecov (if configured)
-   - Adds PR comment with coverage summary
 
-## Coverage File Auto-Detection
+## Report File Auto-Detection
 
-The action automatically searches for common coverage files in the following order:
-
-- `coverage/clover.xml`
-- `coverage/coverage.xml`
-- `coverage/cobertura-coverage.xml`
-- `build/logs/clover.xml`
-- `test-results/coverage.xml`
-- `test-results/clover.xml`
+When `report-file` is not specified, the action uses "auto:test,auto:coverage" detection which searches for common test and coverage report patterns in your working directory.
 
 ## Coverage Reporters
 
 ### GitHub (Default)
 
-Generates a coverage summary and posts it as a PR comment using ReportGenerator.
+Parses coverage reports and posts summary as a PR comment.
 
 ```yaml
 - uses: hoverkraft-tech/ci-github-php/actions/test@main
@@ -103,6 +100,19 @@ jobs:
       - uses: hoverkraft-tech/ci-github-php/actions/test@main
 ```
 
+### With Custom Command
+
+```yaml
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hoverkraft-tech/ci-github-php/actions/test@main
+        with:
+          command: "test:with-coverage"
+```
+
 ### With GitHub Coverage
 
 ```yaml
@@ -135,7 +145,7 @@ jobs:
           coverage: "codecov"
 ```
 
-### With Custom Coverage File
+### With Custom Report Files
 
 ```yaml
 jobs:
@@ -146,11 +156,11 @@ jobs:
       - uses: hoverkraft-tech/ci-github-php/actions/test@main
         with:
           coverage: "github"
-          coverage-files: "build/logs/clover.xml"
+          report-file: "build/logs/clover.xml,junit.xml"
           github-token: ${{ github.token }}
 ```
 
-### In Container Mode
+### In Container Mode with Path Mapping
 
 ```yaml
 jobs:
@@ -162,7 +172,9 @@ jobs:
       - uses: hoverkraft-tech/ci-github-php/actions/test@main
         with:
           container: "true"
-          coverage: "codecov"
+          coverage: "github"
+          path-mapping: "/app:."
+          github-token: ${{ github.token }}
 ```
 
 ### Custom Working Directory
@@ -180,11 +192,12 @@ jobs:
 
 ## Required Composer Script
 
-Your `composer.json` should define a `test` script:
+Your `composer.json` should define a `test:ci` script (or the command you specify):
 
 ```json
 {
   "scripts": {
+    "test:ci": "phpunit",
     "test": "phpunit"
   }
 }
@@ -192,7 +205,7 @@ Your `composer.json` should define a `test` script:
 
 ## Configuring Coverage in PHPUnit
 
-To generate coverage reports, configure PHPUnit in your `phpunit.xml`:
+To generate coverage reports, configure PHPUnit to output reports in standard formats:
 
 ### Clover Format (Recommended)
 

@@ -5,9 +5,10 @@ This action lints PHP projects with support for pull request reporting and annot
 ## Features
 
 - 👕 Executes lint command via Composer
-- 📊 Auto-detects and processes Checkstyle XML lint reports
+- 📊 Auto-detects and processes lint reports via [parse-ci-reports](https://github.com/hoverkraft-tech/ci-github-common/tree/main/actions/parse-ci-reports)
 - 💬 Annotates pull requests with linting issues
 - 🐳 Supports running in Docker containers
+- 🗺️ Path mapping support for containerized environments
 
 ## Usage
 
@@ -16,6 +17,7 @@ This action lints PHP projects with support for pull request reporting and annot
   with:
     working-directory: "."
     container: "false"
+    command: "lint:ci"
 ```
 
 ## Inputs
@@ -24,7 +26,9 @@ This action lints PHP projects with support for pull request reporting and annot
 | -------------------- | --------------------------------------------------------------------------- | -------- | ------- |
 | `working-directory`  | Working directory where lint commands are executed. Can be absolute or relative to the repository root. | No | `.` |
 | `container`          | Whether running in container mode (skips checkout and PHP setup)           | No       | `false` |
-| `report-file`        | Path to lint report file to process as GitHub annotations. Supports Checkstyle XML format. If not specified, auto-detection will be attempted. | No | `` |
+| `command`            | Composer script command to run for linting. Should generate lint reports in standard formats. | No | `lint:ci` |
+| `report-file`        | Optional lint report path forwarded to parse-ci-reports. When omitted, uses "auto:lint" detection. | No | `` |
+| `path-mapping`       | Optional path mapping to adjust file paths in reports. Format: "container_path:repo_path,..." | No | `` |
 
 ## How It Works
 
@@ -33,25 +37,17 @@ This action lints PHP projects with support for pull request reporting and annot
    - Configures caching for PHPStan, Psalm, and PHP CS Fixer
 
 2. **Run Linting**:
-   - Executes `composer lint` command
+   - Executes `composer {command}` (default: `composer lint:ci`)
    - Captures exit code and output
 
 3. **Report Processing**:
-   - Auto-detects lint report files (checkstyle.xml, phpcs-report.xml, etc.)
-   - Processes Checkstyle XML format reports
-   - Adds GitHub annotations to pull requests
+   - Uses [parse-ci-reports](https://github.com/hoverkraft-tech/ci-github-common/tree/main/actions/parse-ci-reports) action to auto-detect and process lint reports
+   - Supports multiple report formats (Checkstyle XML, ESLint JSON, etc.)
+   - Adds GitHub annotations and summary to pull requests
 
 ## Report File Auto-Detection
 
-The action automatically searches for common lint report files in the following order:
-
-- `checkstyle-result.xml`
-- `checkstyle.xml`
-- `phpcs-report.xml`
-- `phpcs.xml`
-- `lint-results.xml`
-- `reports/checkstyle.xml`
-- `reports/phpcs.xml`
+When `report-file` is not specified, the action uses "auto:lint" detection which searches for common lint report patterns in your working directory.
 
 ## Examples
 
@@ -64,6 +60,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: hoverkraft-tech/ci-github-php/actions/lint@main
+```
+
+### With Custom Command
+
+```yaml
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hoverkraft-tech/ci-github-php/actions/lint@main
+        with:
+          command: "lint:checkstyle"
 ```
 
 ### With Custom Report File
@@ -79,7 +88,7 @@ jobs:
           report-file: "build/checkstyle.xml"
 ```
 
-### In Container Mode
+### In Container Mode with Path Mapping
 
 ```yaml
 jobs:
@@ -91,6 +100,7 @@ jobs:
       - uses: hoverkraft-tech/ci-github-php/actions/lint@main
         with:
           container: "true"
+          path-mapping: "/app:."
 ```
 
 ### Custom Working Directory
@@ -108,15 +118,16 @@ jobs:
 
 ## Required Composer Script
 
-Your `composer.json` should define a `lint` script:
+Your `composer.json` should define a `lint:ci` script (or the command you specify):
 
 ```json
 {
   "scripts": {
-    "lint": [
-      "@php-cs-fixer",
-      "@phpstan"
+    "lint:ci": [
+      "@phpstan",
+      "@php-cs-fixer"
     ],
+    "phpstan": "phpstan analyse src --level=max --no-progress",
     "php-cs-fixer": "php-cs-fixer fix --dry-run --diff",
     "phpstan": "phpstan analyse"
   }
