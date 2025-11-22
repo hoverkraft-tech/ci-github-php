@@ -6,11 +6,12 @@ This reusable workflow performs comprehensive continuous integration steps for P
 
 - 🛡️ **CodeQL Analysis** - Security scanning with GitHub's CodeQL
 - 🛡️ **Dependency Review** - Automated dependency vulnerability scanning for PRs
-- 👕 **Linting** - Code quality checks with PHP linters and PR annotations
+- 👕 **Linting** - Code quality checks with PHP linters and PR annotations via [parse-ci-reports](https://github.com/hoverkraft-tech/ci-github-common/tree/main/actions/parse-ci-reports)
 - 🏗️ **Build** - Optional build steps with environment variables and artifact support
 - 🧪 **Testing** - Automated test execution with PHPUnit
 - 📊 **Code Coverage** - Coverage reporting with GitHub PR comments or Codecov
-- 🐳 **Container Support** - Run jobs inside Docker containers
+- 🐳 **Advanced Container Support** - Run jobs inside Docker containers with full configuration options
+- 🗺️ **Path Mapping** - Automatic path mapping for containerized environments
 - 🎯 **Custom Runners** - Specify custom GitHub runners
 
 ## Usage
@@ -52,18 +53,20 @@ jobs:
 | `runs-on`             | string  | No       | `["ubuntu-latest"]`  | JSON array of runner(s) to use. See [GitHub docs](https://docs.github.com/en/actions/using-jobs/choosing-the-runner-for-a-job). |
 | `build`               | string  | No       | `"build"`            | Build parameters. Can be a string, JSON array, or JSON object. See [Build Configuration](#build-configuration). |
 | `checks`              | boolean | No       | `true`               | Enable check steps (lint, build, test).                                        |
-| `lint`                | string  | No       | `"true"`             | Enable linting. Set to empty to disable. Accepts JSON object for options. See [lint action](../actions/lint/README.md). |
+| `lint`                | string  | No       | `"true"`             | Enable linting. Set to empty to disable. Accepts JSON object for options. See [lint action](../actions/lint/README.md). Scripts should generate reports in standard formats. Example: `lint:ci` script. |
 | `code-ql`             | string  | No       | `"php"`              | CodeQL analysis language. Set to empty string to disable. See [CodeQL docs](https://github.com/github/codeql-action). |
 | `dependency-review`   | boolean | No       | `true`               | Enable dependency review scan. See [dependency-review-action](https://github.com/actions/dependency-review-action). |
-| `test`                | string  | No       | `"true"`             | Enable testing. Set to empty to disable. Accepts JSON object for options. See [test action](../actions/test/README.md). |
+| `test`                | string  | No       | `"true"`             | Enable testing. Set to empty to disable. Accepts JSON object for options. See [test action](../actions/test/README.md). Scripts should generate test and coverage reports in standard formats. Example: `test:ci` script. |
 | `working-directory`   | string  | No       | `"."`                | Working directory where the dependencies are installed.                        |
-| `container`           | string  | No       | `""`                 | Docker container image to run CI steps in. When specified, steps execute inside the container. |
+| `container`           | string  | No       | `""`                 | Container configuration. Accepts string (image name) or JSON object with advanced options. See [Container Configuration](#container-configuration). |
 
 ## Secrets
 
-| Name             | Description                                                                     | Required |
-| ---------------- | ------------------------------------------------------------------------------- | -------- |
-| `build-secrets`  | Multi-line env-formatted secrets for build step. Example: `SECRET=${{ secrets.SECRET }}` | No |
+| Name                 | Description                                                                     | Required |
+| -------------------- | ------------------------------------------------------------------------------- | -------- |
+| `build-secrets`      | Multi-line env-formatted secrets for build step. Example: `SECRET=${{ secrets.SECRET }}` | No |
+| `container-password` | Password for container registry authentication. Required for private registries. | No |
+| `github-token`       | GitHub token to use for authentication. Defaults to `GITHUB_TOKEN` if not provided. | No |
 
 ## Outputs
 
@@ -125,20 +128,66 @@ with:
 
 When specifying an artifact, the build output will be uploaded and made available to the test job.
 
+## Container Configuration
+
+The `container` input supports two formats:
+
+### Simple String (Image Name)
+
+```yaml
+with:
+  container: "php:8.2-cli"
+```
+
+### JSON Object (Advanced)
+
+```yaml
+with:
+  container: |
+    {
+      "image": "php:8.2-cli",
+      "env": {
+        "APP_ENV": "production"
+      },
+      "options": "--cpus 2",
+      "ports": [8080, 3000],
+      "volumes": ["/tmp:/tmp", "/cache:/cache"],
+      "credentials": {
+        "username": "myusername"
+      },
+      "pathMapping": {
+        "/app": "."
+      }
+    }
+```
+
+**Supported Properties:**
+
+- `image` (required) - Container image name
+- `env` (object) - Environment variables
+- `options` (string) - Additional Docker options
+- `ports` (array) - Ports to expose
+- `volumes` (array) - Volume mounts
+- `credentials` (object) - Registry credentials (username + password secret)
+- `pathMapping` (object) - Path mapping from container to repository paths
+
+When using `credentials`, you must also provide the `container-password` secret.
+
 ## Lint Configuration
 
 The `lint` input can be:
 
-- `"true"` (default): Enable linting with default settings
+- `"true"` (default): Enable linting with default settings (uses `lint:ci` composer script)
 - `""` or `null`: Disable linting
 - JSON object: Custom lint options (see [lint action](../actions/lint/README.md))
 
-Example with custom options:
+Example with custom command:
 
 ```yaml
 with:
   lint: |
     {
+      "command": "lint:checkstyle",
       "report-file": "custom-checkstyle.xml"
     }
 ```
@@ -147,7 +196,7 @@ with:
 
 The `test` input can be:
 
-- `"true"` (default): Enable testing with GitHub coverage (default)
+- `"true"` (default): Enable testing with GitHub coverage (uses `test:ci` composer script)
 - `""` or `null`: Disable testing
 - JSON object: Custom test options (see [test action](../actions/test/README.md))
 
@@ -161,18 +210,27 @@ with:
     }
 ```
 
-Example with custom coverage file:
+Example with custom command and report:
 
 ```yaml
 with:
   test: |
     {
+      "command": "test:with-coverage",
       "coverage": "github",
-      "coverage-files": "build/logs/clover.xml"
+      "report-file": "build/logs/clover.xml,junit.xml"
     }
 ```
 
 ## Jobs
+
+### Prepare
+
+Parses container configuration and extracts settings for use by other jobs. This job:
+- Validates container input format
+- Extracts container image, environment, options, ports, volumes
+- Handles container registry credentials
+- Sets up path mapping for containerized environments
 
 ### CodeQL Analysis
 
@@ -190,9 +248,8 @@ Scans dependencies for known vulnerabilities. Runs if:
 ### Setup
 
 Prepares the environment by:
-- Setting up PHP and Composer
-- Installing dependencies
-- Parsing build configuration
+- Checking out repository code (if not in container mode)
+- Parsing build configuration from input
 
 ### Lint
 
@@ -201,9 +258,10 @@ Runs linting tools with PR annotations. Runs if:
 - `lint` is not empty
 
 The lint action:
-- Executes `composer lint`
-- Auto-detects Checkstyle XML reports
+- Executes `composer lint:ci` (or specified command)
+- Uses [parse-ci-reports](https://github.com/hoverkraft-tech/ci-github-common/tree/main/actions/parse-ci-reports) to process reports
 - Adds GitHub annotations for linting issues
+- Supports path mapping for container environments
 - See [lint action](../../actions/lint/README.md) for details
 
 ### Build
@@ -225,10 +283,11 @@ Runs test suite with coverage reporting. Runs if:
 - `test` is not empty
 
 The test action:
-- Executes `composer test`
-- Generates coverage reports
+- Executes `composer test:ci` (or specified command)
+- Uses [parse-ci-reports](https://github.com/hoverkraft-tech/ci-github-common/tree/main/actions/parse-ci-reports) to process test/coverage reports
 - Posts coverage summary to PRs (default)
 - Uploads to Codecov (if configured)
+- Supports path mapping for container environments
 - See [test action](../../actions/test/README.md) for details
 
 ## Examples
@@ -239,6 +298,23 @@ The test action:
 jobs:
   ci:
     uses: hoverkraft-tech/ci-github-php/.github/workflows/continuous-integration.yml@main
+```
+
+### Custom Composer Scripts
+
+```yaml
+jobs:
+  ci:
+    uses: hoverkraft-tech/ci-github-php/.github/workflows/continuous-integration.yml@main
+    with:
+      lint: |
+        {
+          "command": "lint:strict"
+        }
+      test: |
+        {
+          "command": "test:integration"
+        }
 ```
 
 ### Custom Configuration
@@ -307,14 +383,51 @@ jobs:
         }
 ```
 
-### In Docker Container
+### In Docker Container (Simple)
 
 ```yaml
 jobs:
   ci:
     uses: hoverkraft-tech/ci-github-php/.github/workflows/continuous-integration.yml@main
     with:
-      container: "my-php-image:latest"
+      container: "php:8.2-cli"
+```
+
+### In Docker Container (Advanced)
+
+```yaml
+jobs:
+  ci:
+    uses: hoverkraft-tech/ci-github-php/.github/workflows/continuous-integration.yml@main
+    with:
+      container: |
+        {
+          "image": "my-php-image:latest",
+          "env": {
+            "APP_ENV": "testing"
+          },
+          "pathMapping": {
+            "/app": "."
+          }
+        }
+```
+
+### With Private Container Registry
+
+```yaml
+jobs:
+  ci:
+    uses: hoverkraft-tech/ci-github-php/.github/workflows/continuous-integration.yml@main
+    with:
+      container: |
+        {
+          "image": "registry.example.com/my-php-image:latest",
+          "credentials": {
+            "username": "myusername"
+          }
+        }
+    secrets:
+      container-password: ${{ secrets.CONTAINER_PASSWORD }}
 ```
 
 ### On Self-Hosted Runners
