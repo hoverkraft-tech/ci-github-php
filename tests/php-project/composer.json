@@ -25,10 +25,15 @@
       "@phpstan",
       "@php-cs-fixer"
     ],
+    "lint:ci": [
+      "@phpstan",
+      "@php-cs-fixer"
+    ],
     "phpstan": "phpstan analyse src --level=max --no-progress",
     "php-cs-fixer": "php-cs-fixer fix --dry-run --diff --verbose",
     "build": "mkdir -p dist && echo \"build test\" > dist/test.txt && echo \"✓ Build completed\"",
     "test": "phpunit",
+    "test:ci": "phpunit",
     "test:coverage": "phpunit --coverage-clover=coverage/clover.xml"
   },
   "config": {

@@ -16,28 +16,40 @@ inputs:
     description: "Whether running in container mode (skips checkout and PHP setup)"
     required: false
     default: "false"
+  command:
+    description: |
+      Composer script command to run for testing.
+      This should be a script defined in your composer.json.
+      The command should generate coverage report files in a standard format (Cobertura XML, Clover, etc.).
+    required: false
+    default: "test:ci"
   coverage:
     description: |
       Code coverage reporter to use. Supported values:
-      - "github": Use ReportGenerator for PR comments with coverage reports
-      - "codecov": Upload coverage to Codecov
-      - "": No coverage reporting
+      - `github`: Parse coverage reports via [parse-ci-reports](https://hoverkraft-tech/ci-github-common/actions/parse-ci-reports) action, with GitHub summaries/PR comments
+      - `codecov`: Upload coverage to Codecov
+      - `""` or `null`: No coverage reporting
     required: false
     default: "github"
-  coverage-files:
+  report-file:
     description: |
-      Path to coverage files for reporting.
+      Optional test and coverage report paths forwarded to the hoverkraft-tech/ci-github-common/actions/parse-ci-reports action.
       Supports multiple formats (Cobertura, Clover, etc.).
-      Can be a single file or multiple files separated by semicolons.
-      If not specified, auto-detection will be attempted for common paths:
-      - coverage/clover.xml, coverage/coverage.xml
-      - coverage/cobertura-coverage.xml
+      Provide absolute paths or paths relative to the working directory.
+      Multiple entries can be separated by newlines, commas, or semicolons.
+      When omitted, the action falls back to "auto:test,auto:coverage" detection.
+    required: false
+    default: ""
+  path-mapping:
+    description: |
+      Optional path mapping to adjust file paths in test and coverage reports.
+      See the [parse-ci-reports documentation](https://hoverkraft-tech/ci-github-common/actions/parse-ci-reports) for details.
     required: false
     default: ""
   github-token:
     description: |
       GitHub token for coverage PR comments.
-      Required when coverage is set to "github".
+      Required when coverage is set to `github`.
     required: false
     default: ""
 
@@ -64,110 +76,53 @@ runs:
 
     - id: run-test
       name: 🧪 Run tests
-      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
       env:
         RUN_TEST_COMMAND: ${{ inputs.container == 'true' && steps.get-package-manager.outputs.run-script-command || steps.setup-php.outputs.run-script-command }}
         WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        TEST_COMMAND: ${{ inputs.command }}
       with:
         script: |
-          const workingDirectory = process.env.WORKING_DIRECTORY || '.';
+          const workingDirectory = process.env.WORKING_DIRECTORY;
           const runScriptCommand = process.env.RUN_TEST_COMMAND;
+          const testCommand = process.env.TEST_COMMAND || 'test:ci';
+
+          core.info(`🧪 Running test command: ${testCommand}...`);
+
           try {
-            const result = await exec.getExecOutput(runScriptCommand, ['test'], {
-              cwd: require('path').resolve(process.env.GITHUB_WORKSPACE, workingDirectory),
+            const exitCode = await exec.exec(runScriptCommand, [testCommand], {
+              cwd: workingDirectory,
+              env: { ...process.env, CI: 'true' },
               ignoreReturnCode: true
             });
-            
-            if (result.stdout) core.info(result.stdout);
-            if (result.stderr) core.warning(result.stderr);
-            
-            core.setOutput('test-exit-code', result.exitCode);
-            
-            if (result.exitCode !== 0) {
-              core.setFailed(`Tests failed with exit code ${result.exitCode}`);
+
+            core.setOutput('test-exit-code', exitCode);
+
+            if (exitCode !== 0) {
+              core.setFailed(`Tests failed with exit code ${exitCode}`);
             }
           } catch (error) {
             core.setOutput('test-exit-code', 1);
             core.setFailed(`Test execution error: ${error.message}`);
           }
 
-    # Auto-detect coverage files if not specified
-    - id: detect-coverage-files
+    - name: 📊 Parse coverage reports
       if: always() && inputs.coverage == 'github'
-      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
-      env:
-        WORKING_DIRECTORY: ${{ inputs.working-directory }}
-        COVERAGE_FILES: ${{ inputs.coverage-files }}
+      id: parse-coverage-reports
+      uses: hoverkraft-tech/ci-github-common/actions/parse-ci-reports@c314229c3ca6914f7023ffca7afc26753ab99b41 # 0.30.1
       with:
-        script: |
-          const path = require('node:path');
-          const fs = require('node:fs');
-
-          const workingDirectory = process.env.WORKING_DIRECTORY || '.';
-          const workDir = path.resolve(process.env.GITHUB_WORKSPACE, workingDirectory);
-
-          if (process.env.COVERAGE_FILES && process.env.COVERAGE_FILES.trim() !== '') {
-            core.info(`Using specified coverage files: ${process.env.COVERAGE_FILES}`);            
-            core.setOutput('coverage-files', process.env.COVERAGE_FILES);
-            return;
-          }
-
-          // Common coverage file paths for PHP
-          const commonPaths = [
-            'coverage/clover.xml',
-            'coverage/coverage.xml',
-            'coverage/cobertura-coverage.xml',
-            'build/logs/clover.xml',
-            'test-results/coverage.xml',
-            'test-results/clover.xml'
-          ];
-
-          for (const filePath of commonPaths) {
-            const fullPath = path.join(workDir, filePath);
-            if (fs.existsSync(fullPath)) {
-              core.info(`Auto-detected coverage file: ${fullPath}`);
-              core.setOutput('coverage-files', fullPath);
-              return;
-            }
-          }
-
-          core.warning('No coverage file auto-detected');
-
-    # ReportGenerator for PR comments with coverage reports
-    - name: 📊 Generate coverage report
-      if: always() && inputs.coverage == 'github' && steps.detect-coverage-files.outputs.coverage-files
-      uses: danielpalme/ReportGenerator-GitHub-Action@dcdfb6e704e87df6b2ed0cf123a6c9f69e364869 # v5.5.0
-      with:
-        reports: ${{ steps.detect-coverage-files.outputs.coverage-files }}
-        targetdir: ${{ runner.temp }}/coveragereport-${{ github.run_id }}
-        reporttypes: MarkdownSummaryGithub
-        sourcedirs: ${{ inputs.working-directory }}
-
-    - if: always() && inputs.coverage == 'github'
-      id: get-coverage-report-summary
-      uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
-      env:
-        SUMMARY_FILE: ${{ runner.temp }}/coveragereport-${{ github.run_id }}/SummaryGithub.md
-      with:
-        script: |
-          const fs = require('fs');
-          const summaryFilePath = process.env.SUMMARY_FILE;
-
-          if (!fs.existsSync(summaryFilePath)) {
-            return core.setFailed(`Coverage summary file not found: ${summaryFilePath}`);
-          }
-
-          const summaryContent = fs.readFileSync(summaryFilePath, 'utf8');
-          core.summary.addRaw(summaryContent).write();
-
-          core.setOutput('summary-content', summaryContent);
+        working-directory: ${{ inputs.working-directory }}
+        report-name: "Coverage Results"
+        report-paths: ${{ inputs.report-file || 'auto:test,auto:coverage' }}
+        path-mapping: ${{ inputs.path-mapping }}
+        output-format: "summary,markdown"
 
     - name: 📊 Add coverage PR comment
-      if: always() && steps.get-coverage-report-summary.outputs.summary-content && github.event_name == 'pull_request'
-      uses: hoverkraft-tech/ci-github-common/actions/create-or-update-comment@5f11437c716059f30c635f90055060e4ef8b31a0 # 0.28.0
+      if: always() && inputs.coverage == 'github' && github.event_name == 'pull_request' && steps.parse-coverage-reports.outputs.markdown
+      uses: hoverkraft-tech/ci-github-common/actions/create-or-update-comment@c314229c3ca6914f7023ffca7afc26753ab99b41 # 0.30.1
       with:
         title: "Code Coverage Report"
-        body: ${{ steps.get-coverage-report-summary.outputs.summary-content }}
+        body: ${{ steps.parse-coverage-reports.outputs.markdown }}
 
     # Install dependencies for codecov in container mode
     - name: Install Codecov dependencies
