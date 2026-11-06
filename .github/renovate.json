@@ -1,0 +1,46 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "enabledManagers": ["github-actions", "custom.regex"],
+  "semanticCommits": "enabled",
+  "minimumReleaseAge": "7 days",
+  "minimumReleaseAgeBehaviour": "timestamp-optional",
+  "pinDigests": true,
+  "packageRules": [
+    {
+      "description": "Dependabot is the primary dependency updater.",
+      "matchPackageNames": ["*"],
+      "enabled": false
+    },
+    {
+      "description": "Update docker:// action references unsupported by Dependabot.",
+      "matchDatasources": ["docker"],
+      "matchDepTypes": ["docker"],
+      "enabled": true
+    },
+    {
+      "description": "Keep the PHP runtime and Composer bootstrap current.",
+      "matchManagers": ["custom.regex"],
+      "enabled": true,
+      "automerge": false
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.php-version$/"],
+      "matchStrings": ["(?<currentValue>\\d+\\.\\d+(?:\\.\\d+)?)"],
+      "datasourceTemplate": "github-tags",
+      "depNameTemplate": "php/php-src",
+      "versioningTemplate": "semver-coerced",
+      "extractVersionTemplate": "^php-(?<version>\\d+\\.\\d+)\\.\\d+$"
+    },
+    {
+      "customType": "regex",
+      "managerFilePatterns": ["/^actions/setup-php/action\\.yml$/"],
+      "matchStrings": ["tools: composer:(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
+      "datasourceTemplate": "github-releases",
+      "depNameTemplate": "composer/composer"
+    }
+  ]
+}

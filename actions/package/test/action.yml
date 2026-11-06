@@ -1,0 +1,90 @@
+name: Test Composer package
+description: Test the committed Composer distribution in an isolated production installation, respecting Git export rules. No release artifact is produced.
+author: hoverkraft
+branding:
+  icon: package
+  color: blue
+inputs:
+  working-directory:
+    description: Git repository root containing the public composer.json. Set up PHP and Composer first.
+    default: .
+  commands:
+    description: Optional shell commands in the isolated consumer. vendor/bin is on PATH. PACKAGE_NAME, PACKAGE_INSTALL_PATH and PACKAGE_ARCHIVE_PATH identify the tested package. Installation disables plugins and scripts; cleanup runs after success or failure.
+    default: ""
+runs:
+  using: composite
+  steps:
+    - id: directory
+      uses: hoverkraft-tech/ci-github-common/actions/working-directory@5fbb531db839a26ebcc35c4946be279f945f7633 # 1.0.0
+      with:
+        working-directory: ${{ inputs.working-directory }}
+    - id: test
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      env:
+        DIRECTORY: ${{ steps.directory.outputs.absolute-path }}
+        COMMANDS: ${{ inputs.commands }}
+      with:
+        script: |-
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const { createHash } = require('node:crypto');
+          const cwd = process.env.DIRECTORY;
+          const prefix = await exec.getExecOutput('git', ['rev-parse', '--show-prefix'], {cwd, silent: true});
+          if (prefix.stdout.trim()) throw new Error('Composer distributions must use a Git repository root.');
+          const directory = fs.mkdtempSync(path.join(process.env.RUNNER_TEMP, 'composer-test-'));
+          const archive = path.join(directory, 'source.zip');
+          const digest = () => createHash('sha256').update(fs.readFileSync(archive)).digest('hex');
+          try {
+            await exec.exec('git', ['archive', '--format=zip', '--output', archive, 'HEAD'], {cwd});
+            const expected = digest();
+            const source = path.join(directory, 'package');
+            await io.mkdirP(source);
+            const entries = await exec.getExecOutput('unzip', ['-Z1', archive], { silent: true });
+            for (const entry of entries.stdout.trim().split(/\r?\n/)) {
+              const target = path.resolve(source, entry);
+              if (!target.startsWith(source + path.sep)) throw new Error('Archive entries must stay inside the package.');
+            }
+            await exec.exec('unzip', ['-q', archive, '-d', source]);
+            const manifest = JSON.parse(fs.readFileSync(path.join(source, 'composer.json'), 'utf8'));
+            const name = manifest.name;
+            if (typeof name !== 'string' || !/^[a-z0-9_.-]+\/[a-z0-9_.-]+$/.test(name)) throw new Error('Archive must declare a Composer package name.');
+            if (manifest.version !== undefined) throw new Error('Composer library versions must come from Git tags.');
+            await exec.exec('composer', ['--no-interaction', '--no-plugins', 'validate', '--strict'], { cwd: source });
+            const checkPath = entry => {
+              if (typeof entry !== 'string') throw new Error('Invalid packaged autoload or binary path.');
+              const file = path.resolve(source, entry);
+              if (file !== source && !file.startsWith(source + path.sep)) throw new Error('Packaged entry points must stay inside the package.');
+              if (!fs.existsSync(file)) throw new Error('Missing packaged entry point: ' + entry);
+              const resolved = fs.realpathSync(file);
+              if (resolved !== source && !resolved.startsWith(source + path.sep)) throw new Error('Packaged entry points must not link outside the package.');
+            };
+            for (const map of [manifest.autoload?.['psr-4'], manifest.autoload?.['psr-0']]) {
+              for (const entry of Object.values(map || {}).flat()) checkPath(entry);
+            }
+            for (const entry of [...(manifest.autoload?.files || []), ...(typeof manifest.bin === 'string' ? [manifest.bin] : manifest.bin || [])]) checkPath(entry);
+            const consumer = path.join(directory, 'consumer');
+            await io.mkdirP(consumer);
+            fs.writeFileSync(path.join(consumer, 'composer.json'), JSON.stringify({
+              name: 'ci/package-consumer', type: 'project',
+              repositories: [{ type: 'path', url: source, options: { symlink: false, versions: { [name]: 'dev-package-test' } } }],
+              require: { [name]: 'dev-package-test' },
+              config: { 'allow-plugins': false },
+            }));
+            await exec.exec('composer', ['--no-interaction', '--no-plugins', 'install', '--no-scripts', '--no-progress', '--prefer-dist'], { cwd: consumer });
+            await exec.exec('composer', ['--no-interaction', '--no-plugins', 'check-platform-reqs'], { cwd: consumer });
+            await exec.exec('php', ['-r', 'require "vendor/autoload.php";'], { cwd: consumer });
+            const installed = path.join(consumer, 'vendor', name);
+            const installedManifest = JSON.parse(fs.readFileSync(path.join(installed, 'composer.json'), 'utf8'));
+            if (installedManifest.name !== name) throw new Error('Installed package does not match the source archive.');
+            if (process.env.COMMANDS.trim()) {
+              await exec.exec('bash', ['--noprofile', '--norc', '-e', '-o', 'pipefail', '-c', process.env.COMMANDS], {
+                cwd: consumer,
+                env: { ...process.env, PATH: path.join(consumer, 'vendor', 'bin') + path.delimiter + process.env.PATH,
+                  PACKAGE_NAME: name, PACKAGE_INSTALL_PATH: installed, PACKAGE_ARCHIVE_PATH: archive },
+              });
+            }
+            if (digest() !== expected) throw new Error('Package tests must not modify the source archive.');
+            core.info('Validated installed Composer package ' + name + '.');
+          } finally {
+            await io.rmRF(directory);
+          }

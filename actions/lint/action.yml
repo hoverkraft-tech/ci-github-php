@@ -1,0 +1,52 @@
+name: Lint PHP
+description: Run a project-defined Composer lint script and report results.
+author: hoverkraft
+branding:
+  icon: package
+  color: blue
+inputs:
+  working-directory:
+    description: Composer project directory. Run setup-php first to install its dependencies.
+    default: .
+  command:
+    description: |
+      Composer script to execute, normally `lint:ci` in composer.json.
+      Define the tools and their configuration in that script. Examples:
+
+      - PHPStan: `phpstan analyse --error-format=checkstyle > phpstan-checkstyle.xml`
+      - Psalm: `psalm --output-format=checkstyle > psalm-checkstyle.xml`
+      - PHP_CodeSniffer: `phpcs --report=checkstyle --report-file=phpcs-checkstyle.xml`
+      - PHP CS Fixer: `php-cs-fixer check --format=checkstyle > php-cs-fixer-checkstyle.xml`
+
+      Redirecting output preserves the tool's exit status. The action discovers
+      Checkstyle reports for annotations and summaries. Use paths relative to the project;
+      for separate tooling installations, prefix binaries with `tools/vendor/bin/`.
+      See the [CI guide](../../.github/workflows/continuous-integration.md).
+    default: lint:ci
+runs:
+  using: composite
+  steps:
+    - id: directory
+      uses: hoverkraft-tech/ci-github-common/actions/working-directory@5fbb531db839a26ebcc35c4946be279f945f7633 # 1.0.0
+      with:
+        working-directory: ${{ inputs.working-directory }}
+    - id: run
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      env:
+        WORKING_DIRECTORY: ${{ steps.directory.outputs.absolute-path }}
+        COMMAND: ${{ inputs.command }}
+      with:
+        script: |-
+          const command = process.env.COMMAND.trim();
+          if (!command || command.startsWith('-')) throw new Error('command must name a Composer script.');
+          await exec.exec('composer', ['--no-interaction', 'run-script', '--timeout=0', command], {
+            cwd: process.env.WORKING_DIRECTORY,
+          });
+    - name: Report lint results
+      if: ${{ !cancelled() && steps.directory.outcome == 'success' }}
+      uses: hoverkraft-tech/ci-github-common/actions/quality/parse-ci-reports@5fbb531db839a26ebcc35c4946be279f945f7633 # 1.0.0
+      with:
+        working-directory: ${{ steps.directory.outputs.absolute-path }}
+        report-paths: auto:lint
+        report-name: PHP lint
+        output-format: annotations,summary

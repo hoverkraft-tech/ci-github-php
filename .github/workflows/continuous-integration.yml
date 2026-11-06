@@ -1,0 +1,391 @@
+# Use `continuous-integration.yml` from both your pull request and default-branch
+# workflows. Pin the same reviewed commit in each caller. An application can use
+# lint and tests without enabling Composer package publication.
+#
+# ```yaml
+# permissions: {}
+# jobs:
+#   checks:
+#     uses: hoverkraft-tech/ci-github-php/.github/workflows/continuous-integration.yml@<commit-sha>
+#     permissions:
+#       contents: read
+#       id-token: write
+#     with:
+#       php-versions: '["8.2", "8.3", "8.4", "8.5"]'
+# ```
+#
+# Define `lint:ci` and `test:ci` in `composer.json`. These are explicit project commands;
+# they execute even when dependency installation scripts are disabled. An empty
+# `lint` or `test` input disables that job; `test: "false"` also disables tests. Missing named scripts fail the job. `lint` also accepts a JSON object such as
+# `lint: '{"command":"lint:custom"}'`, or `"false"` to skip linting.
+#
+# Use `runs-on` for a JSON array of Linux runner labels, for example
+# `runs-on: '["self-hosted", "linux"]'`. Every job uses those labels.
+# Set `checks: false` to skip lint, tests, dependency review and distribution checks.
+#
+# ### Runtime and dependencies
+#
+# With no `php-versions` input, setup reads the project's `.php-version`, then the
+# repository's `.php-version`, then delegates platform detection to `setup-php`.
+# An explicit version matrix tests all listed versions. The last entry runs lint
+# and package checks; only that version publishes coverage. An empty entry
+# in the matrix uses the default version selection.
+#
+# Composer projects with or without a committed lockfile are supported. Each
+# project is installed independently. By default, setup installs the root manifest
+# and `tools/composer.json` when it exists. It does not search nested directories.
+# Use `composer-directories` to override discovery, for example `["."]` for the root
+# only or `[".", "dev-tools"]` for another tooling directory. Only Composer's download cache is shared between
+# runs; dependencies are installed and platform requirements checked each time.
+#
+# Installation scripts and plugins are disabled by default. Use
+# `ignore-scripts: false` when installation hooks are required. Use
+# `ignore-plugins: false` for a project with explicit Composer `allow-plugins`
+# configuration, such as PHPStan's extension installer. These options affect
+# installation, not explicit lint or test commands.
+#
+# For custom jobs, call `actions/setup-php` after checkout, then the individual
+# lint or test actions. `install-dependencies: false` prepares the runtime
+# without installing the project, for example before isolated package checks.
+#
+# ### Reports and coverage
+#
+# The lint and test actions reuse `ci-github-common/actions/quality/parse-ci-reports` for
+# GitHub annotations and job summaries. The test action runs your Composer script unchanged. The script selects its test tool,
+# preparation, configuration and report formats. For PHPUnit, keep the everyday test
+# command and add a CI script:
+#
+# ```json
+# {
+#   "scripts": {
+#     "test": "phpunit --configuration tests/phpunit.xml",
+#     "test:ci": "@test --log-junit=junit.xml --coverage-cobertura=cobertura.xml"
+#   }
+# }
+# ```
+#
+# The action sets `CI=true` and adds no test-runner arguments. JUnit reports are
+# parsed even after the command fails. The same Composer command runs on every PHP
+# version; only the last version publishes coverage. The `coverage` option controls
+# publication, not collection. Set it to an empty string to skip coverage publication;
+# omit coverage arguments from your script when collection is not needed.
+#
+# For Codecov, use `--coverage-clover=clover.xml` in the script and configure:
+#
+# ```yaml
+# with:
+#   test: '{"coverage":"codecov"}'
+# ```
+#
+# Codecov requires `id-token: write` and repository access. The action discovers
+# Clover reports, falling back to Cobertura. For GitHub coverage summaries, generate
+# Cobertura. Add generated report files to `.gitignore`. Clean any retained report
+# files in your project command if it reuses an existing workspace.
+#
+# Preparation belongs in the Composer script, with report arguments attached only
+# to the test command:
+#
+# ```json
+# {
+#   "scripts": {
+#     "test:ci": [
+#       "@test:load-fixtures",
+#       "@test --log-junit=junit.xml --coverage-clover=clover.xml"
+#     ]
+#   }
+# }
+# ```
+#
+# Pest and Codeception projects use the same contract; define their commands and
+# report options in Composer. No test-runner selection is needed in the action.
+# Use `command` for a script name other than `test:ci`. Group custom settings in one
+# input, omitting fields that use defaults:
+#
+# ```yaml
+# with:
+#   test: '{"coverage":"codecov","cache":".cache"}'
+# ```
+#
+# The test `cache` option can retain a directory of generated test fixtures or results. Do not
+# cache `vendor`; Composer installation manages dependencies.
+#
+# Dependency review runs only on pull requests. PHP CodeQL analysis is not part of
+# the workflow because PHP is not a supported CodeQL language. Run your PHP static
+# analyzer through the lint script.
+#
+# ### Generated application files and documentation
+#
+# Projects needing asset compilation or generated code keep those steps in their
+# Composer commands or dedicated caller jobs. PHP libraries need no generic build
+# step; Composer distributes committed source selected by Git export rules.
+#
+# For API documentation, use `documentation.yml`, with optional `runs-on` labels
+# for a Linux runner supporting Docker. It uses the project's phpDocumentor
+# configuration when present, otherwise `src/`, and uploads a site containing
+# `phpdoc/`. Run it during pull request validation and restore its `artifact-id` into
+# `_site` for a separate deployment job using `ci-github-publish` actions. Site
+# publishing and project-specific documentation transformations remain in the caller.
+#
+# ### Package checks
+#
+# Set `package: "true"` for a public Composer package at the Git repository root. The
+# test action snapshots the checked-out commit using `git archive`, respecting
+# `.gitattributes` `export-ignore` and `export-subst`. Uncommitted files and generated
+# build output are not included.
+#
+# The test action validates `composer.json`, verifies declared PSR autoload paths,
+# autoload files, and binaries, installs the archive in an isolated consumer with
+# production dependencies, checks platform requirements, and loads the autoloader.
+# Installation hooks and plugins remain disabled in that consumer.
+#
+# Distribution testing is disabled by default. Omit `package` or pass `"false"` to skip it.
+# The input is a string, so boolean values must be quoted. A JSON object enables
+# distribution testing with specific options; unknown options and non-string `tests` fail
+# configuration validation.
+#
+# Use `tests` only for behavior specific to your package, such as rendering a
+# template or invoking a CLI:
+#
+# ```yaml
+# with:
+#   package: '{"tests":"my-cli --help"}'
+# ```
+#
+# Commands execute in the consumer, with `vendor/bin`
+# on `PATH` and `PACKAGE_NAME`, `PACKAGE_INSTALL_PATH`, and `PACKAGE_ARCHIVE_PATH`
+# available. The temporary consumer is removed after success or failure. Modifying
+# the temporary source archive fails validation. Nothing is uploaded: this tests
+# the files GitHub will distribute, without adding a package publication step.
+#
+# Package checks run on the primary PHP version. The source test matrix remains
+# responsible for compatibility across every supported PHP version. Release callers should depend on successful validation with `needs`.
+name: Continuous integration
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: JSON array of Linux runner labels. Applies to every job, including the configuration job.
+        type: string
+        default: '["ubuntu-latest"]'
+      checks:
+        description: Enable lint, tests, dependency review and optional distribution checks.
+        type: boolean
+        default: true
+      working-directory:
+        description: Composer project directory relative to the checkout.
+        type: string
+        default: .
+      php-versions:
+        description: Optional JSON array of PHP versions to test. The last entry runs lint and package checks and publishes coverage. An empty entry uses .php-version or setup-php platform detection. Empty input runs that default once.
+        type: string
+        default: ""
+      extensions:
+        description: PHP extensions forwarded to setup-php.
+        type: string
+        default: mbstring, dom, xml, xmlwriter, curl, zip, intl
+      composer-directories:
+        description: Optional JSON array of Composer directories relative to working-directory. Empty installs the root project and tools/composer.json when present, without recursive discovery.
+        type: string
+        default: ""
+      ignore-scripts:
+        description: Disable Composer installation scripts. Explicit project commands still run.
+        type: boolean
+        default: true
+      ignore-plugins:
+        description: Disable Composer plugins during installation. When false, Composer allow-plugins configuration still applies.
+        type: boolean
+        default: true
+      lint:
+        description: Composer lint script name or a JSON object with `command` (default `lint:ci`). Pass "false", "null" or an empty string to disable.
+        type: string
+        default: "true"
+      test:
+        description: |
+          Run the Composer `test:ci` script unchanged, or provide another script name.
+          Pass "false", "null" or an empty string to disable tests.
+          A JSON object groups test options: `command` (default `test:ci`),
+          `coverage` (`github`, `codecov` or empty), and `cache` (one directory relative to working-directory).
+          Configure report/coverage generation in the Composer script itself.
+          Coverage is published on the last PHP version only; the command controls collection on every version. Codecov requires id-token: write.
+          Example: `{"coverage":"codecov","cache":".cache"}`.
+        type: string
+        default: "true"
+      package:
+        description: |
+          Validate a public Composer source distribution from the Git repository root.
+          Pass "false" (the default) to disable, "true" for archive and autoload checks,
+          or a JSON object with `tests` for additional commands in an isolated Composer consumer.
+          Quote booleans because this input has type string. Example: `{"tests":"my-cli --help"}`.
+          vendor/bin is on PATH; PACKAGE_NAME, PACKAGE_INSTALL_PATH and PACKAGE_ARCHIVE_PATH identify the package.
+          Unknown options and non-string tests are rejected before distribution checks.
+        type: string
+        default: "false"
+      dependency-review:
+        description: Review dependency changes on pull requests.
+        type: boolean
+        default: true
+permissions: {}
+jobs:
+  configuration:
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    permissions: {}
+    outputs:
+      versions: ${{ steps.config.outputs.versions }}
+      primary-version: ${{ steps.config.outputs.primary-version }}
+      lint: ${{ steps.config.outputs.lint }}
+      test: ${{ steps.config.outputs.test }}
+      package-enabled: ${{ steps.package-config.outputs.enabled }}
+      package-tests: ${{ steps.package-config.outputs.tests }}
+    steps:
+      - id: package-config
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          PACKAGE_INPUT: ${{ inputs.package }}
+        with:
+          script: |
+            let config;
+            try {
+              config = JSON.parse(process.env.PACKAGE_INPUT.trim() || 'false');
+            } catch {
+              throw new Error('package must be true, false, or a JSON object.');
+            }
+            if (typeof config !== 'boolean' && (!config || typeof config !== 'object' || Array.isArray(config))) {
+              throw new Error('package must be true, false, or a JSON object.');
+            }
+            const enabled = config !== false;
+            if (typeof config === 'boolean') config = {};
+            const unknown = Object.keys(config).filter(key => key !== 'tests');
+            if (unknown.length) throw new Error(`Unknown package options: ${unknown.join(', ')}.`);
+            const { tests = '' } = config;
+            if (typeof tests !== 'string') throw new Error('package.tests must be a string.');
+            core.setOutput('enabled', enabled);
+            core.setOutput('tests', tests);
+      - id: config
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          VERSIONS: ${{ inputs.php-versions }}
+          LINT: ${{ inputs.lint }}
+          TEST: ${{ inputs.test }}
+        with:
+          script: |-
+            const versions = process.env.VERSIONS.trim() ? JSON.parse(process.env.VERSIONS) : [''];
+            if (!Array.isArray(versions) || !versions.length || versions.length > 20 || versions.some(version => typeof version !== 'string' || (version && !/^\d+\.\d+(?:\.\d+)?$/.test(version))) || new Set(versions).size !== versions.length) {
+              throw new Error('php-versions must be a JSON array of unique numeric PHP versions.');
+            }
+            function options(name, input, defaults) {
+              const value = input.trim();
+              if (['', 'false', 'null'].includes(value)) return null;
+              let config;
+              if (value === 'true') config = {};
+              else if (value.startsWith('{') || value.startsWith('[')) {
+                try { config = JSON.parse(value); } catch { throw new Error(name + ' must contain valid JSON.'); }
+              } else config = {command: value};
+              if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error(name + ' must be a script name or a JSON object.');
+              const unknown = Object.keys(config).filter(key => !Object.hasOwn(defaults, key));
+              if (unknown.length) throw new Error('Unknown ' + name + ' options: ' + unknown.join(', ') + '.');
+              config = {...defaults, ...config};
+              for (const [key, option] of Object.entries(config)) {
+                if (typeof option !== 'string') throw new Error(name + '.' + key + ' must be a string.');
+              }
+              if (!config.command.trim() || config.command.startsWith('-') || /\s/.test(config.command)) throw new Error(name + '.command must name a Composer script.');
+              return config;
+            }
+            const lint = options('lint', process.env.LINT, {command: 'lint:ci'});
+            const test = options('test', process.env.TEST, {command: 'test:ci', coverage: 'github', cache: ''});
+            if (test && !['', 'github', 'codecov'].includes(test.coverage)) throw new Error('test.coverage must be github, codecov or empty.');
+            const cache = test?.cache;
+            if (cache && (cache === '.' || cache.startsWith('/') || cache.includes('\\') || cache.split('/').includes('..') || /[\r\n*?]/.test(cache))) {
+              throw new Error('test.cache must be one directory inside working-directory.');
+            }
+            core.setOutput('lint', JSON.stringify(lint));
+            core.setOutput('test', JSON.stringify(test));
+            core.setOutput('versions', versions);
+            core.setOutput('primary-version', versions.at(-1));
+  dependency-review:
+    if: inputs.checks && github.event_name == 'pull_request' && inputs.dependency-review
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294
+  lint:
+    if: inputs.checks && needs.configuration.outputs.lint != 'null'
+    needs: configuration
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: $/actions/setup-php
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          php-version: ${{ needs.configuration.outputs.primary-version }}
+          extensions: ${{ inputs.extensions }}
+          composer-directories: ${{ inputs.composer-directories }}
+          ignore-scripts: ${{ inputs.ignore-scripts }}
+          ignore-plugins: ${{ inputs.ignore-plugins }}
+      - uses: $/actions/lint
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          command: ${{ fromJSON(needs.configuration.outputs.lint).command }}
+  test:
+    if: inputs.checks && needs.configuration.outputs.test != 'null'
+    needs: configuration
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    permissions:
+      contents: read
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        php-version: ${{ fromJSON(needs.configuration.outputs.versions) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: $/actions/setup-php
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          php-version: ${{ matrix.php-version }}
+          extensions: ${{ inputs.extensions }}
+          composer-directories: ${{ inputs.composer-directories }}
+          ignore-scripts: ${{ inputs.ignore-scripts }}
+          ignore-plugins: ${{ inputs.ignore-plugins }}
+      - if: fromJSON(needs.configuration.outputs.test).cache != ''
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ inputs.working-directory }}/${{ fromJSON(needs.configuration.outputs.test).cache }}
+          key: php-tests-${{ runner.os }}-${{ matrix.php-version }}-${{ inputs.working-directory }}-${{ fromJSON(needs.configuration.outputs.test).cache }}-${{ hashFiles(format('{0}/**/composer.json', inputs.working-directory)) }}
+          restore-keys: php-tests-${{ runner.os }}-${{ matrix.php-version }}-${{ inputs.working-directory }}-${{ fromJSON(needs.configuration.outputs.test).cache }}-
+      - uses: $/actions/test
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          command: ${{ fromJSON(needs.configuration.outputs.test).command }}
+          coverage: ${{ matrix.php-version == needs.configuration.outputs.primary-version && fromJSON(needs.configuration.outputs.test).coverage || '' }}
+  package:
+    if: inputs.checks && needs.configuration.outputs.package-enabled == 'true'
+    needs: configuration
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: $/actions/setup-php
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          php-version: ${{ needs.configuration.outputs.primary-version }}
+          extensions: ${{ inputs.extensions }}
+          ignore-scripts: ${{ inputs.ignore-scripts }}
+          install-dependencies: "false"
+          coverage: none
+      - uses: $/actions/package/test
+        with:
+          working-directory: ${{ inputs.working-directory }}
+          commands: ${{ needs.configuration.outputs.package-tests }}

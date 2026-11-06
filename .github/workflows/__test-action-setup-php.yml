@@ -1,0 +1,83 @@
+name: Internal - Test setup-php action
+on:
+  workflow_call: null
+permissions: {}
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Arrange - Copy a project without a lockfile
+        run: |-
+          cp -r tests/php-project "$GITHUB_WORKSPACE/.test-php-project"
+          rm -f "$GITHUB_WORKSPACE/.test-php-project/composer.lock"
+      - name: Act - Discover and install project tooling
+        id: setup
+        uses: $/actions/setup-php
+        with:
+          working-directory: ${{ github.workspace }}/.test-php-project
+      - name: Assert - Dependencies installed without installation hooks
+        run: |-
+          test -f "$GITHUB_WORKSPACE/.test-php-project/vendor/autoload.php"
+          test -f "$GITHUB_WORKSPACE/.test-php-project/tools/vendor/autoload.php"
+          test ! -e "$GITHUB_WORKSPACE/.test-php-project/install-hook.txt"
+      - name: Arrange - Remove installed tooling
+        run: rm -rf "$GITHUB_WORKSPACE/.test-php-project/tools/vendor"
+      - name: Act - Explicitly install only the root and allow hooks
+        uses: $/actions/setup-php
+        with:
+          working-directory: ${{ github.workspace }}/.test-php-project
+          composer-directories: '["."]'
+          ignore-scripts: "false"
+      - name: Assert - Explicit selection skips tooling and enables hooks
+        run: |-
+          test -f "$GITHUB_WORKSPACE/.test-php-project/install-hook.txt"
+          test ! -d "$GITHUB_WORKSPACE/.test-php-project/tools/vendor"
+      - name: Arrange - Root-only project with an unrelated nested manifest
+        run: |-
+          mkdir -p "$GITHUB_WORKSPACE/.test-php-empty/nested"
+          printf '%s\n' '{"name":"ci/root-only","description":"Root-only Composer fixture","license":"MIT"}' > "$GITHUB_WORKSPACE/.test-php-empty/composer.json"
+          cp "$GITHUB_WORKSPACE/.test-php-empty/composer.json" "$GITHUB_WORKSPACE/.test-php-empty/nested/composer.json"
+      - name: Act - Install a root-only project
+        uses: $/actions/setup-php
+        with:
+          working-directory: ${{ github.workspace }}/.test-php-empty
+      - name: Assert - Discovery does not recurse
+        run: |-
+          test -f "$GITHUB_WORKSPACE/.test-php-empty/vendor/autoload.php"
+          test ! -d "$GITHUB_WORKSPACE/.test-php-empty/nested/vendor"
+          rm -rf "$GITHUB_WORKSPACE/.test-php-empty/vendor"
+      - name: Act - Set up runtime only
+        uses: $/actions/setup-php
+        with:
+          working-directory: ${{ github.workspace }}/.test-php-empty
+          install-dependencies: "false"
+      - name: Assert - Installation was skipped
+        run: test ! -d "$GITHUB_WORKSPACE/.test-php-empty/vendor"
+      - name: Act - Reject a path outside the project
+        id: invalid
+        uses: $/actions/setup-php
+        continue-on-error: true
+        with:
+          working-directory: ${{ github.workspace }}/.test-php-project
+          composer-directories: '["../.test-php-empty"]'
+      - name: Assert - Invalid directory rejected
+        env:
+          OUTCOME: ${{ steps.invalid.outcome }}
+        run: test "$OUTCOME" = failure
+      - name: Arrange - Tooling symlink outside the project
+        run: ln -s "$GITHUB_WORKSPACE/.test-php-project/tools" "$GITHUB_WORKSPACE/.test-php-empty/tools"
+      - name: Act - Reject discovered tooling outside the project
+        id: invalid-symlink
+        uses: $/actions/setup-php
+        continue-on-error: true
+        with:
+          working-directory: ${{ github.workspace }}/.test-php-empty
+      - name: Assert - Tooling symlink rejected
+        env:
+          OUTCOME: ${{ steps.invalid-symlink.outcome }}
+        run: test "$OUTCOME" = failure

@@ -1,0 +1,70 @@
+name: Internal - Test release journey
+on:
+  workflow_call: null
+permissions: {}
+jobs:
+  release:
+    name: Assert - Preparation and publication guards
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const assert = require('node:assert/strict');
+            const fs = require('node:fs');
+            const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+            function script(workflow, id) {
+              const source = fs.readFileSync('.github/workflows/' + workflow + '.yml', 'utf8');
+              const step = source.split('      - id: ' + id + '\n')[1]?.split('\n      - ')[0]?.split('\n  publish:')[0];
+              const body = step?.split('          script: |-\n')[1]?.replace(/^ {12}/gm, '');
+              assert.ok(body, workflow + ': script exists: ' + id);
+              return new AsyncFunction('core', 'context', 'process', 'require', body);
+            }
+            const releaseContext = {repo: {owner: 'example', repo: 'library'}, sha: 'source-sha', ref: 'refs/heads/main', eventName: 'workflow_dispatch', payload: {repository: {default_branch: 'main'}}};
+            async function run(workflow, id, {env = {}, overrides = {}, manifest = {name: 'example/library'}} = {}) {
+              const outputs = {};
+              await script(workflow, id)({setOutput: (key, value) => { outputs[key] = value; }, info: () => {}},
+                {...releaseContext, ...overrides}, {env}, name => {
+                  assert.equal(name, 'node:fs');
+                  return {readFileSync: () => JSON.stringify(manifest)};
+                });
+              return outputs;
+            }
+            const prepare = (id, options) => run('prepare-package-release', id, options);
+            const publish = options => run('release', 'source', {env: {TAG: 'v1.2.3'}, ...options});
+            for (const overrides of [{}, {eventName: 'schedule'}, {ref: 'refs/tags/v1.2.3'}]) {
+              await prepare('event', {overrides});
+              await publish({overrides});
+            }
+            for (const overrides of [{eventName: 'pull_request'}, {eventName: 'push'}, {ref: 'refs/heads/feature'}, {eventName: 'schedule', ref: 'refs/tags/v1.2.3'}]) {
+              await assert.rejects(() => prepare('event', {overrides}), /Release preparation requires/);
+              await assert.rejects(() => publish({overrides}), /Publication requires/);
+            }
+            for (const tag of ['1.2.3', 'v1.2.3']) {
+              for (const changes of ['true', 'false']) {
+                assert.deepEqual(await prepare('identity', {env: {TAG: tag, HAS_CHANGES: changes}}), {'has-changes': changes === 'true', tag});
+              }
+              assert.deepEqual(await prepare('identity', {env: {TAG: 'v9.9.9', HAS_CHANGES: 'false'}, overrides: {ref: 'refs/tags/' + tag}}), {'has-changes': true, tag});
+            }
+            for (const tag of ['', 'v01.2.3', 'v1.2.3-rc.1', 'package@1.2.3', 'v1.2.3\n']) {
+              await assert.rejects(() => prepare('identity', {env: {TAG: tag, HAS_CHANGES: 'true'}}), /stable/);
+              await assert.rejects(() => publish({env: {TAG: tag}}), /stable/);
+            }
+            assert.deepEqual(await prepare('result', {env: {HAS_CHANGES: 'false', TAG: 'v1.2.3', RELEASES: ''}}), {status: 'no-changes', tag: ''});
+            for (const published of [false, true]) {
+              const releases = JSON.stringify([{tag: 'v1.2.3', published}]);
+              assert.deepEqual(await prepare('result', {env: {HAS_CHANGES: 'true', TAG: 'v1.2.3', RELEASES: releases}}), {status: published ? 'released' : 'ready', tag: published ? '' : 'v1.2.3'});
+            }
+            for (const releases of [[], [{tag: 'v2.0.0', published: false}], [{tag: 'v1.2.3', published: 'false'}]]) {
+              await assert.rejects(() => prepare('result', {env: {HAS_CHANGES: 'true', TAG: 'v1.2.3', RELEASES: JSON.stringify(releases)}}), /verified publication state/);
+            }
+            await assert.rejects(() => publish({overrides: {ref: 'refs/tags/v1.2.4'}}), /matching the retry tag/);
+            for (const manifest of [{}, {name: 'Example/invalid'}, {name: 'example/library', version: '1.2.3'}]) {
+              await assert.rejects(() => publish({manifest}), /public Composer package/);
+            }
+            core.info('Preparation status, source identity and publication guards passed without publishing.');

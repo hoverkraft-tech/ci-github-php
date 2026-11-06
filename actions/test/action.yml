@@ -1,0 +1,100 @@
+name: Test PHP
+description: Run Composer tests and report results, optionally uploading coverage.
+author: hoverkraft
+branding:
+  icon: package
+  color: blue
+inputs:
+  working-directory:
+    description: Composer project directory. Run setup-php first to install its dependencies.
+    default: .
+  command:
+    description: |
+      Composer script to execute unchanged, normally `test:ci` in composer.json.
+      The project defines its test tool, preparation and report generation. Examples:
+
+      - PHPUnit: `phpunit --configuration phpunit.xml --log-junit=junit.xml --coverage-cobertura=cobertura.xml`
+      - Pest: `pest --ci --log-junit=junit.xml --coverage-cobertura=cobertura.xml`
+      - Codeception: `codecept run --xml=junit.xml --coverage-xml=clover.xml`;
+        enable coverage in codeception.yml and select `coverage: codecov` for its Clover XML.
+
+      For Codecov, PHPUnit and Pest can use `--coverage-clover=clover.xml`.
+      Omit coverage arguments when collection is not needed. The coverage input controls publication only.
+      See the [CI guide](../../.github/workflows/continuous-integration.md).
+    default: test:ci
+  coverage:
+    description: "Coverage destination: `github` for report parsing, `codecov` for OIDC upload, or empty to disable coverage publication. Coverage files must be produced by the test command."
+    default: github
+runs:
+  using: composite
+  steps:
+    - id: directory
+      uses: hoverkraft-tech/ci-github-common/actions/working-directory@5fbb531db839a26ebcc35c4946be279f945f7633 # 1.0.0
+      with:
+        working-directory: ${{ inputs.working-directory }}
+    - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+      env:
+        COVERAGE: ${{ inputs.coverage }}
+      with:
+        script: |-
+          if (!['', 'github', 'codecov'].includes(process.env.COVERAGE)) throw new Error('coverage must be github, codecov or empty.');
+    - id: run
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      env:
+        WORKING_DIRECTORY: ${{ steps.directory.outputs.absolute-path }}
+        COMMAND: ${{ inputs.command }}
+      with:
+        script: |-
+          const command = process.env.COMMAND.trim();
+          if (!command || command.startsWith('-')) throw new Error('command must name a Composer script.');
+          const args = ['--no-interaction', 'run-script', '--timeout=0', command];
+          await exec.exec('composer', args, {cwd: process.env.WORKING_DIRECTORY, env: {...process.env, CI: 'true'}});
+    - name: Report test results
+      if: ${{ !cancelled() && steps.directory.outcome == 'success' }}
+      uses: hoverkraft-tech/ci-github-common/actions/quality/parse-ci-reports@5fbb531db839a26ebcc35c4946be279f945f7633 # 1.0.0
+      with:
+        working-directory: ${{ steps.directory.outputs.absolute-path }}
+        report-paths: ${{ inputs.coverage == 'github' && 'auto:test,auto:coverage' || 'auto:test' }}
+        report-name: PHP tests
+        output-format: annotations,summary
+    - name: Find coverage reports
+      id: coverage-reports
+      if: "!cancelled() && steps.run.outcome != 'skipped' && inputs.coverage == 'codecov'"
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      env:
+        WORKING_DIRECTORY: ${{ steps.directory.outputs.absolute-path }}
+      with:
+        script: |-
+          const fs = require('node:fs/promises');
+          const directory = process.env.WORKING_DIRECTORY;
+          const reports = {clover: [], cobertura: []};
+          const search = await glob.create([
+            `${directory}/**/*.xml`,
+            `!${directory}/**/vendor/**`,
+            `!${directory}/**/node_modules/**`,
+            `!${directory}/**/.git/**`,
+          ].join('\n'), {followSymbolicLinks: false, matchDirectories: false});
+          for await (const file of search.globGenerator()) {
+            const handle = await fs.open(file, 'r');
+            let header;
+            try {
+              const {buffer, bytesRead} = await handle.read(Buffer.alloc(8192), 0, 8192, 0);
+              header = buffer.toString('utf8', 0, bytesRead);
+            } finally {
+              await handle.close();
+            }
+            if (/<coverage\b[^>]*>\s*<project\b/.test(header)) reports.clover.push(file);
+            else if (/<coverage\b[^>]*\bline-rate=/.test(header)) reports.cobertura.push(file);
+          }
+          const files = reports.clover.length ? reports.clover : reports.cobertura;
+          if (!files.length) throw new Error('No Clover or Cobertura coverage reports found. Enable coverage in the Composer test script.');
+          if (files.some(file => file.includes(','))) throw new Error('Coverage report paths must not contain commas.');
+          core.info(`Uploading ${files.length} ${reports.clover.length ? 'Clover' : 'Cobertura'} coverage report(s).`);
+          core.setOutput('files', files.sort().join(','));
+    - name: Upload coverage
+      if: "!cancelled() && steps.coverage-reports.outcome == 'success'"
+      uses: hoverkraft-tech/ci-github-common/actions/quality/codecov@5fbb531db839a26ebcc35c4946be279f945f7633 # 1.0.0
+      with:
+        working-directory: ${{ steps.directory.outputs.absolute-path }}
+        files: ${{ steps.coverage-reports.outputs.files }}
+        fail-ci-if-error: "true"

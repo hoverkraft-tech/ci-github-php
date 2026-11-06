@@ -1,0 +1,119 @@
+name: Setup PHP
+description: Set up PHP and Composer, cache downloads and install project dependencies with or without lockfiles.
+author: hoverkraft
+branding:
+  icon: package
+  color: blue
+inputs:
+  working-directory:
+    description: Project directory relative to the checkout.
+    default: .
+  php-version:
+    description: Explicit PHP version. Empty reads the project or repository .php-version, then setup-php platform detection.
+    default: ""
+  extensions:
+    description: PHP extensions forwarded to shivammathur/setup-php.
+    default: mbstring, dom, xml, xmlwriter, curl, zip, intl
+  coverage:
+    description: "Coverage driver: none, pcov or xdebug."
+    default: pcov
+  composer-directories:
+    description: JSON array of Composer project directories relative to working-directory. Empty installs the root project and tools/composer.json when present, without recursive discovery.
+    default: ""
+  install-dependencies:
+    description: Install project dependencies. Disable for jobs that only create an archive or install a separate consumer.
+    default: "true"
+  ignore-scripts:
+    description: Disable Composer installation scripts. Explicit Composer scripts run by later actions are unaffected.
+    default: "true"
+  ignore-plugins:
+    description: Disable Composer plugins during installation. Set false when needed; composer.json allow-plugins still controls which plugins may run.
+    default: "true"
+outputs:
+  php-version:
+    description: Installed PHP major and minor version.
+    value: ${{ steps.configuration.outputs.php-version }}
+runs:
+  using: composite
+  steps:
+    - id: directory
+      uses: hoverkraft-tech/ci-github-common/actions/working-directory@5fbb531db839a26ebcc35c4946be279f945f7633 # 1.0.0
+      with:
+        working-directory: ${{ inputs.working-directory }}
+    - id: version-file
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      env:
+        DIRECTORY: ${{ steps.directory.outputs.absolute-path }}
+      with:
+        script: |-
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const local = path.join(process.env.DIRECTORY, '.php-version');
+          core.setOutput('path', fs.existsSync(local) ? local : path.join(process.env.GITHUB_WORKSPACE, '.php-version'));
+    - id: php
+      uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+      env:
+        COMPOSER_PROJECT_DIR: ${{ steps.directory.outputs.absolute-path }}
+      with:
+        php-version: ${{ inputs.php-version }}
+        php-version-file: ${{ steps.version-file.outputs.path }}
+        tools: composer:2.11.0
+        extensions: ${{ inputs.extensions }}
+        coverage: ${{ inputs.coverage }}
+    - id: configuration
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      env:
+        WORKING_DIRECTORY: ${{ steps.directory.outputs.absolute-path }}
+        COMPOSER_DIRECTORIES: ${{ inputs.composer-directories }}
+        INSTALL_DEPENDENCIES: ${{ inputs.install-dependencies }}
+        IGNORE_SCRIPTS: ${{ inputs.ignore-scripts }}
+        IGNORE_PLUGINS: ${{ inputs.ignore-plugins }}
+      with:
+        script: |-
+          const fs = require('node:fs');
+          const path = require('node:path');
+          for (const key of ['INSTALL_DEPENDENCIES', 'IGNORE_SCRIPTS', 'IGNORE_PLUGINS']) {
+            if (!['true', 'false'].includes(process.env[key])) throw new Error(key + ' must be true or false.');
+          }
+          const root = fs.realpathSync(process.env.WORKING_DIRECTORY);
+          const configured = process.env.COMPOSER_DIRECTORIES.trim();
+          const directories = configured ? JSON.parse(configured) : ['.'];
+          if (!configured && fs.statSync(path.join(root, 'tools', 'composer.json'), { throwIfNoEntry: false })?.isFile()) directories.push('tools');
+          if (!Array.isArray(directories) || !directories.length || directories.some(value => typeof value !== 'string' || !value || path.isAbsolute(value))) {
+            throw new Error('composer-directories must be a nonempty JSON array of relative directories.');
+          }
+          const resolved = directories.map(directory => {
+            const absolute = fs.realpathSync(path.resolve(root, directory));
+            if (absolute !== root && !absolute.startsWith(root + path.sep)) throw new Error('Composer directories must stay inside working-directory.');
+            if (!fs.statSync(path.join(absolute, 'composer.json'), { throwIfNoEntry: false })?.isFile()) throw new Error('Missing composer.json in ' + directory);
+            return absolute;
+          });
+          if (new Set(resolved).size !== resolved.length) throw new Error('Composer directories must be unique.');
+          const cache = await exec.getExecOutput('composer', ['--no-plugins', 'config', 'cache-files-dir'], { cwd: root, silent: true });
+          const php = await exec.getExecOutput('php', ['-r', 'echo PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;'], { silent: true });
+          core.setOutput('directories', resolved);
+          core.setOutput('cache', cache.stdout.trim());
+          core.setOutput('php-version', php.stdout.trim());
+    - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: ${{ steps.configuration.outputs.cache }}
+        key: composer-${{ runner.os }}-${{ steps.configuration.outputs.php-version }}-${{ hashFiles(format('{0}/**/composer.json', inputs.working-directory), format('{0}/**/composer.lock', inputs.working-directory)) }}
+        restore-keys: composer-${{ runner.os }}-${{ steps.configuration.outputs.php-version }}-
+    - id: install
+      if: inputs.install-dependencies == 'true'
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      env:
+        DIRECTORIES: ${{ steps.configuration.outputs.directories }}
+        IGNORE_SCRIPTS: ${{ inputs.ignore-scripts }}
+        IGNORE_PLUGINS: ${{ inputs.ignore-plugins }}
+      with:
+        script: |-
+          for (const directory of JSON.parse(process.env.DIRECTORIES)) {
+            const flags = ['--no-interaction'];
+            if (process.env.IGNORE_PLUGINS === 'true') flags.push('--no-plugins');
+            await exec.exec('composer', [...flags, 'validate', '--no-check-publish'], { cwd: directory });
+            const install = [...flags, 'install', '--prefer-dist', '--no-progress', '--optimize-autoloader'];
+            if (process.env.IGNORE_SCRIPTS === 'true') install.push('--no-scripts');
+            await exec.exec('composer', install, { cwd: directory });
+            await exec.exec('composer', [...flags, 'check-platform-reqs'], { cwd: directory });
+          }
