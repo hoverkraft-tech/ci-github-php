@@ -1,0 +1,29 @@
+{
+  "name": "hoverkraft/test-ci-composer",
+  "description": "Test project for PHP CI workflow",
+  "type": "library",
+  "require": {
+    "php": "^8.2"
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^10.0"
+  },
+  "autoload": {
+    "psr-4": {
+      "TestCi\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "TestCi\\Tests\\": "tests/"
+    }
+  },
+  "scripts": {
+    "lint:ci": "tools/vendor/bin/phpstan analyse src --level=max --no-progress --error-format=github",
+    "test": "phpunit",
+    "post-install-cmd": "@php -r \"file_put_contents('install-hook.txt', 'hook executed');\"",
+    "post-update-cmd": "@post-install-cmd",
+    "test:ci": "@test --log-junit=junit.xml --coverage-cobertura=cobertura.xml"
+  },
+  "license": "MIT"
+}

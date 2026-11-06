@@ -1,0 +1,62 @@
+# Build PHP API documentation with phpDocumentor and upload it for a separate deployment job.
+#
+# The workflow uses the project's phpDocumentor configuration when present, or documents
+# `src/` by default. It puts the generated site in `_site/phpdoc/` and uploads `_site/`.
+# No Composer installation or deployment is performed. Use ci-github-publish deployment
+# actions in the caller to combine API documentation with guides or publish GitHub Pages.
+name: Build PHP documentation
+on:
+  workflow_call:
+    inputs:
+      runs-on:
+        description: JSON array of Linux runner labels. The runner must support Docker containers.
+        type: string
+        default: '["ubuntu-latest"]'
+      working-directory:
+        description: PHP project directory relative to the checkout.
+        type: string
+        default: .
+    outputs:
+      artifact-id:
+        description: Uploaded documentation artifact ID.
+        value: ${{ jobs.build.outputs.artifact-id }}
+permissions: {}
+jobs:
+  build:
+    runs-on: ${{ fromJSON(inputs.runs-on) }}
+    permissions:
+      contents: read
+    container:
+      image: phpdoc/phpdoc:3.10.0@sha256:312ebf61ed88a6ea79aac768e43c9e9af0dd5bf3e710ed6d40ab8e53bfeeb121
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: directory
+        uses: hoverkraft-tech/ci-github-common/actions/working-directory@5fbb531db839a26ebcc35c4946be279f945f7633 # 1.0.0
+        with:
+          working-directory: ${{ inputs.working-directory }}
+      - name: Generate API documentation
+        shell: bash
+        working-directory: ${{ steps.directory.outputs.absolute-path }}
+        run: |
+          arguments=(run --target=_site/phpdoc)
+          configured=false
+          for configuration in phpdoc.xml phpdoc.dist.xml phpdoc.xml.dist .phpdoc.xml.dist .phpdoc.xml .phpdoc.dist.xml; do
+            if [[ -f "$configuration" ]]; then
+              configured=true
+              break
+            fi
+          done
+          if [[ "$configured" == false ]]; then
+            arguments+=(--directory=src)
+          fi
+          phpdoc "${arguments[@]}"
+      - id: upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: php-documentation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.directory.outputs.absolute-path }}/_site
+          if-no-files-found: error

@@ -1,0 +1,31 @@
+name: Need fix to Issue
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      #checkov:skip=CKV_GHA_7: required
+      manual-commit-ref:
+        description: "The SHA of the commit to get the diff for"
+        required: true
+      manual-base-ref:
+        description: "By default, the commit entered above is compared to the one directly before it; to go back further, enter an earlier SHA here"
+        required: false
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  main:
+    uses: hoverkraft-tech/ci-github-common/.github/workflows/need-fix-to-issue.yml@5fbb531db839a26ebcc35c4946be279f945f7633 # 1.0.0
+    permissions:
+      contents: read
+      issues: write
+    with:
+      manual-commit-ref: ${{ inputs.manual-commit-ref }}
+      manual-base-ref: ${{ inputs.manual-base-ref }}

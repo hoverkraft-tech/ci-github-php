@@ -1,0 +1,93 @@
+name: Internal - Test PHP test action
+on:
+  workflow_call: null
+permissions: {}
+jobs:
+  test:
+    name: Test (${{ matrix.scenario }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - scenario: reports
+            coverage: github
+          - scenario: publication-disabled
+            coverage: ""
+          - scenario: preparation
+            coverage: ""
+          - scenario: composer-command
+            coverage: ""
+          - scenario: failing-command
+            coverage: ""
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Arrange - Project test script
+        id: fixture
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          SCENARIO: ${{ matrix.scenario }}
+        with:
+          script: |-
+            const fs = require('node:fs/promises');
+            const path = require('node:path');
+            const directory = path.join(process.env.GITHUB_WORKSPACE, '.test-php-tests');
+            await io.cp(path.join(process.env.GITHUB_WORKSPACE, 'tests/php-project'), directory, {recursive: true});
+            const manifestPath = path.join(directory, 'composer.json');
+            const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+            const scenario = process.env.SCENARIO;
+            if (scenario === 'preparation') {
+              await fs.writeFile(path.join(directory, 'prepare.php'), '<?php if ($argc !== 1) { throw new RuntimeException("Unexpected test arguments"); } file_put_contents("prepared.txt", "ready");');
+              manifest.scripts['test:ci'] = ['@php prepare.php', '@test --log-junit=junit.xml --no-coverage'];
+            }
+            if (scenario === 'composer-command') {
+              await fs.writeFile(path.join(directory, 'custom.php'), `<?php
+              if ($argc !== 1 || getenv('CI') !== 'true') { throw new RuntimeException('Unexpected command environment or arguments'); }
+              file_put_contents('junit.xml', '<testsuites><testsuite name="custom" tests="1" failures="0" errors="0" skipped="0" time="0"><testcase name="custom" classname="CustomTest" time="0"/></testsuite></testsuites>');
+              `);
+              manifest.scripts['test:ci'] = '@php custom.php';
+            }
+            if (scenario === 'failing-command') {
+              manifest.scripts['test:ci'] = ['@test --log-junit=junit.xml --no-coverage', "@php -r 'exit(7);'"];
+            }
+            await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+            core.setOutput('directory', directory);
+      - uses: $/actions/setup-php
+        with:
+          working-directory: ${{ steps.fixture.outputs.directory }}
+          composer-directories: '["."]'
+      - name: Act - Run project tests
+        id: tests
+        continue-on-error: ${{ matrix.scenario == 'failing-command' }}
+        uses: $/actions/test
+        with:
+          working-directory: ${{ steps.fixture.outputs.directory }}
+          coverage: ${{ matrix.coverage }}
+      - name: Assert - Reports and project preparation
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        env:
+          DIRECTORY: ${{ steps.fixture.outputs.directory }}
+          OUTCOME: ${{ steps.tests.outcome }}
+          SCENARIO: ${{ matrix.scenario }}
+        with:
+          script: |-
+            const assert = require('node:assert/strict');
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const directory = process.env.DIRECTORY;
+            const scenario = process.env.SCENARIO;
+            assert.equal(process.env.OUTCOME, scenario === 'failing-command' ? 'failure' : 'success');
+            assert.match(fs.readFileSync(path.join(directory, 'junit.xml'), 'utf8'), /<testcase\b/);
+            const cobertura = path.join(directory, 'cobertura.xml');
+            if (['reports', 'publication-disabled'].includes(scenario)) {
+              assert.match(fs.readFileSync(cobertura, 'utf8'), /<coverage\b[^>]*\bline-rate=/);
+            } else {
+              assert.equal(fs.existsSync(cobertura), false, 'Only the Composer script controls report generation.');
+            }
+            if (scenario === 'preparation') {
+              assert.equal(fs.readFileSync(path.join(directory, 'prepared.txt'), 'utf8'), 'ready');
+            }

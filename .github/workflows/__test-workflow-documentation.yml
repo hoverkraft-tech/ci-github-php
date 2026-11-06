@@ -1,0 +1,27 @@
+name: Internal - Test documentation workflow
+on:
+  workflow_call: null
+permissions: {}
+jobs:
+  act:
+    name: Act - Generate PHP API documentation
+    uses: $/.github/workflows/documentation.yml
+    permissions:
+      contents: read
+    with:
+      working-directory: tests/php-project
+      runs-on: '["ubuntu-24.04"]'
+  assert:
+    name: Assert - Documentation artifact contains the API
+    needs: act
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.act.outputs.artifact-id }}
+          path: _site
+      - name: Check generated pages
+        run: |
+          test -s _site/phpdoc/index.html
+          test -s _site/phpdoc/classes/TestCi-Sample.html

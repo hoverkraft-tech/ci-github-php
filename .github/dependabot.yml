@@ -1,0 +1,55 @@
+version: 2
+updates:
+  - package-ecosystem: docker
+    open-pull-requests-limit: 20
+    directory: /
+    schedule:
+      interval: weekly
+      day: friday
+      time: "04:00"
+    groups:
+      docker-dependencies:
+        patterns:
+          - "*"
+    cooldown:
+      default-days: 7
+  - package-ecosystem: github-actions
+    open-pull-requests-limit: 20
+    directories:
+      - /
+      - /actions/**/*
+    schedule:
+      interval: weekly
+      day: friday
+      time: "04:00"
+    groups:
+      github-actions-dependencies:
+        patterns:
+          - "*"
+    cooldown:
+      default-days: 7
+  - package-ecosystem: composer
+    open-pull-requests-limit: 20
+    versioning-strategy: increase
+    directories:
+      - /tests/php-project
+      - /tests/php-project/tools
+    schedule:
+      interval: weekly
+      day: friday
+      time: "04:00"
+    groups:
+      php-dependencies:
+        patterns:
+          - "*"
+    cooldown:
+      default-days: 7
+  - package-ecosystem: devcontainers
+    open-pull-requests-limit: 20
+    directory: /
+    schedule:
+      interval: weekly
+      day: friday
+      time: "04:00"
+    cooldown:
+      default-days: 7

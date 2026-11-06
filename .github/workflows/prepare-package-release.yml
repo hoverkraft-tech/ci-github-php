@@ -1,0 +1,96 @@
+# Plan a Composer source release before validation, without changing repository state.
+# Continue only when status is ready, then pass tag to the release workflow.
+# See [the release guide](release.md) for the complete prepare, validate and release journey.
+name: Prepare Composer Package Release
+on:
+  workflow_call:
+    inputs:
+      release-config:
+        description: Partial YAML or JSON configuration forwarded to ci-github-publish/actions/release/plan. Pass the same configuration to preparation and publication.
+        type: string
+        default: ""
+      force:
+        description: Plan a release without relevant changes on manual default-branch runs. Ignored on schedules and tag retries. Shared planning preserves higher versions and never overwrites tags.
+        type: boolean
+        default: false
+    outputs:
+      status:
+        description: ready, no-changes or released. Only ready should start validation and publication.
+        value: ${{ jobs.prepare.outputs.status }}
+      tag:
+        description: Planned or recovered Composer version tag. Available when status is ready; pass unchanged to release.yml.
+        value: ${{ jobs.prepare.outputs.tag }}
+permissions: {}
+concurrency:
+  group: php-release-prepare-${{ github.repository }}
+  cancel-in-progress: false
+jobs:
+  prepare:
+    name: Prepare package release
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      status: ${{ steps.result.outputs.status }}
+      tag: ${{ steps.result.outputs.tag }}
+    steps:
+      - id: event
+        name: Validate release event
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |-
+            const defaultRef = 'refs/heads/' + context.payload.repository.default_branch;
+            const manualTag = context.eventName === 'workflow_dispatch' && context.ref.startsWith('refs/tags/');
+            if (!['workflow_dispatch', 'schedule'].includes(context.eventName) || (context.ref !== defaultRef && !manualTag)) {
+              throw new Error('Release preparation requires a manual or scheduled default-branch run, or a manual tag retry.');
+            }
+      - id: plan
+        if: "!startsWith(github.ref, 'refs/tags/')"
+        uses: hoverkraft-tech/ci-github-publish/actions/release/plan@d983bd6279de308518b8b8df7c51e179fd50bffb # 2.1.0
+        with:
+          release-config: ${{ inputs.release-config }}
+          target-sha: ${{ github.sha }}
+          force: ${{ github.event_name == 'workflow_dispatch' && inputs.force }}
+      - id: identity
+        name: Check Composer version format
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          TAG: ${{ steps.plan.outputs.tag }}
+          HAS_CHANGES: ${{ steps.plan.outputs.has-changes }}
+        with:
+          script: |-
+            const retry = context.ref.startsWith('refs/tags/');
+            const tag = retry ? context.ref.slice('refs/tags/'.length) : process.env.TAG;
+            if (!/^(v?)(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(tag)) {
+              throw new Error('Composer release tags must be stable X.Y.Z or vX.Y.Z versions.');
+            }
+            core.setOutput('has-changes', retry || process.env.HAS_CHANGES === 'true');
+            core.setOutput('tag', tag);
+      - id: verify
+        if: steps.identity.outputs.has-changes == 'true'
+        uses: hoverkraft-tech/ci-github-publish/actions/release/verify@d983bd6279de308518b8b8df7c51e179fd50bffb # 2.1.0
+        with:
+          tags: ${{ format('["{0}"]', steps.identity.outputs.tag) }}
+          require-tags: ${{ startsWith(github.ref, 'refs/tags/') }}
+      - id: result
+        name: Report preparation status
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          HAS_CHANGES: ${{ steps.identity.outputs.has-changes }}
+          TAG: ${{ steps.identity.outputs.tag }}
+          RELEASES: ${{ steps.verify.outputs.releases }}
+        with:
+          script: |-
+            let status = 'no-changes';
+            if (process.env.HAS_CHANGES === 'true') {
+              const releases = JSON.parse(process.env.RELEASES);
+              if (releases.length !== 1 || releases[0].tag !== process.env.TAG || typeof releases[0].published !== 'boolean') {
+                throw new Error('Expected verified publication state for the prepared tag.');
+              }
+              status = releases[0].published ? 'released' : 'ready';
+            }
+            core.setOutput('status', status);
+            core.setOutput('tag', status === 'ready' ? process.env.TAG : '');
+            core.info('Release preparation: ' + status + '.');

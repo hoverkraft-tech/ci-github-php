@@ -1,0 +1,8 @@
+{
+  "threshold": 5,
+  "ignore": [
+    "**/vendor/**",
+    "**/actions/**/README.md",
+    "**/.github/workflows/*.md"
+  ]
+}

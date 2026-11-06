@@ -1,0 +1,73 @@
+name: Internal - Test package/test action
+on:
+  workflow_call: null
+permissions: {}
+jobs:
+  package:
+    name: Package (${{ matrix.fixture }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        fixture:
+          - valid
+          - missing-autoload
+          - missing-binary
+          - failing-command
+          - mutated-archive
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: $/actions/setup-php
+        with:
+          working-directory: tests/php-project
+          install-dependencies: "false"
+      - name: Arrange - Independent source repository
+        id: fixture
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          FIXTURE: ${{ matrix.fixture }}
+        with:
+          script: |-
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const directory = path.join(process.env.GITHUB_WORKSPACE, '.test-package-fixture');
+            await io.mkdirP(path.join(directory, 'src'));
+            const manifest = {name: 'ci/example-' + process.env.FIXTURE, description: 'Composer package test fixture', type: 'library', license: 'MIT', require: {php: '^8.2'}, autoload: {'psr-4': {'Example\\': 'src/'}}, bin: ['bin/example'], scripts: {'post-install-cmd': 'exit 1'}};
+            fs.writeFileSync(path.join(directory, 'src', 'Message.php'), '<?php namespace Example; final class Message { public function text(): string { return "hello"; } }');
+            await io.mkdirP(path.join(directory, 'bin'));
+            fs.writeFileSync(path.join(directory, 'bin', 'example'), '#!/usr/bin/env php\n<?php echo "example\\n";');
+            fs.writeFileSync(path.join(directory, 'private.txt'), 'not distributed');
+            let attributes = 'private.txt export-ignore\n';
+            if (process.env.FIXTURE === 'missing-autoload') attributes += 'src export-ignore\n';
+            if (process.env.FIXTURE === 'missing-binary') attributes += 'bin export-ignore\n';
+            fs.writeFileSync(path.join(directory, '.gitattributes'), attributes);
+            fs.writeFileSync(path.join(directory, 'composer.json'), JSON.stringify(manifest));
+            await exec.exec('git', ['init', '--initial-branch=main', directory]);
+            await exec.exec('git', ['add', '.'], {cwd: directory});
+            await exec.exec('git', ['-c', 'user.name=Tests', '-c', 'user.email=tests@example.test', '-c', 'commit.gpgsign=false', 'commit', '-m', 'test: package fixture'], {cwd: directory});
+            core.setOutput('directory', directory);
+      - name: Act - Test installed source package
+        id: test
+        uses: $/actions/package/test
+        continue-on-error: true
+        with:
+          working-directory: ${{ steps.fixture.outputs.directory }}
+          commands: |-
+            test ! -e "$PACKAGE_INSTALL_PATH/private.txt"
+            php -r 'require "vendor/autoload.php"; if ((new Example\Message())->text() !== "hello") { throw new RuntimeException("Invalid package"); }'
+            test "$(example)" = example
+            if [ "$FIXTURE" = failing-command ]; then exit 1; fi
+            if [ "$FIXTURE" = mutated-archive ]; then printf modified >> "$PACKAGE_ARCHIVE_PATH"; fi
+        env:
+          FIXTURE: ${{ matrix.fixture }}
+      - name: Assert - Expected result and cleanup
+        env:
+          OUTCOME: ${{ steps.test.outcome }}
+          FIXTURE: ${{ matrix.fixture }}
+        run: |-
+          if [ "$FIXTURE" = valid ]; then test "$OUTCOME" = success; else test "$OUTCOME" = failure; fi
+          test -z "$(find "$RUNNER_TEMP" -maxdepth 1 -type d -name 'composer-test-*' -print -quit)"

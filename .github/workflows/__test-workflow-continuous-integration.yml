@@ -1,0 +1,133 @@
+name: Internal - Test continuous integration workflow
+on:
+  workflow_call: null
+permissions: {}
+jobs:
+  package-configuration:
+    name: Assert - Package configuration
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const assert = require('node:assert/strict');
+            const fs = require('node:fs');
+            const workflow = fs.readFileSync('.github/workflows/continuous-integration.yml', 'utf8');
+            const step = workflow.split('      - id: package-config\n')[1]?.split('\n      - ')[0];
+            assert.ok(step, 'Package configuration step must exist');
+            const script = step.split('          script: |\n')[1]?.replace(/^ {12}/gm, '');
+            assert.ok(script, 'Package configuration script must exist');
+            const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+            const configure = new AsyncFunction('core', 'process', 'require', script);
+            async function parse(input, container = '') {
+              const outputs = {};
+              await configure({
+                setOutput: (name, value) => { outputs[name] = typeof value === 'string' ? value : JSON.stringify(value); }
+              }, { env: { PACKAGE_INPUT: input, CONTAINER_INPUT: container } }, require);
+              return outputs;
+            }
+            for (const input of ['', 'false', '  false  ']) {
+              const outputs = await parse(input);
+              assert.equal(outputs.enabled, 'false', input);
+              assert.equal(outputs.tests, '');
+            }
+            for (const input of ['true', '{}', '  true  ']) {
+              const outputs = await parse(input);
+              assert.equal(outputs.enabled, 'true', input);
+              assert.equal(outputs.tests, '');
+            }
+            const commands = 'echo "$PACKAGE_NAME"\necho "consumer check"\n';
+            const custom = await parse(JSON.stringify({ tests: commands }));
+            assert.equal(custom.enabled, 'true');
+            assert.equal(custom.tests, commands, 'Preserve multiline commands and shell quoting');
+            for (const input of ['no', 'null', '[]', '0', '"true"', '{']) {
+              await assert.rejects(() => parse(input), /package must be true, false, or a JSON object/, input);
+            }
+            await assert.rejects(() => parse('{"unknown":true}'), /Unknown package options/);
+            for (const tests of [true, 1, [], {}, null]) {
+              await assert.rejects(() => parse(JSON.stringify({ tests })), /must be.*string/);
+            }
+            core.info('Package configuration checks passed.');
+
+  configuration:
+    name: Assert - Lint and test configuration
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const assert = require('node:assert/strict');
+            const fs = require('node:fs');
+            const workflow = fs.readFileSync('.github/workflows/continuous-integration.yml', 'utf8');
+            const step = workflow.split('      - id: config\n')[1]?.split('\n  dependency-review:')[0];
+            const script = step?.split('          script: |-\n')[1]?.replace(/^ {12}/gm, '');
+            assert.ok(script, 'Configuration script must exist');
+            const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
+            const configure = new AsyncFunction('core', 'process', script);
+            async function parse(env = {}) {
+              const outputs = {};
+              await configure({setOutput: (key, value) => { outputs[key] = value; }}, {
+                env: {VERSIONS: '', LINT: 'true', TEST: 'true', ...env}
+              });
+              return {...outputs, lint: JSON.parse(outputs.lint), test: JSON.parse(outputs.test)};
+            }
+            const defaults = await parse();
+            assert.deepEqual(defaults.lint, {command: 'lint:ci'});
+            assert.equal((await parse({LINT: '{"command":"lint:custom"}'})).lint.command, 'lint:custom');
+            assert.deepEqual(defaults.test, {command: 'test:ci', coverage: 'github', cache: ''});
+            for (const value of ['', 'false', 'null']) {
+              const config = await parse({LINT: value, TEST: value});
+              assert.equal(config.lint, null);
+              assert.equal(config.test, null);
+            }
+            const configured = await parse({TEST: '{"command":"test:custom","coverage":"","cache":".cache"}', VERSIONS: '["8.2", "8.5"]'});
+            assert.deepEqual(configured.test, {command: 'test:custom', coverage: '', cache: '.cache'});
+            assert.equal(configured['primary-version'], '8.5');
+            assert.equal((await parse({TEST: 'test:custom'})).test.command, 'test:custom');
+            for (const name of ['LINT', 'TEST']) {
+              for (const value of ['{', '[]', '{"unknown":true}', '{"command":null}', '{"command":[]}', '{"command":""}', '-bad']) {
+                await assert.rejects(() => parse({[name]: value}), undefined, name + '=' + value);
+              }
+            }
+            for (const test of [{coverage: false}, {coverage: 'unknown'}, {cache: '../vendor'}, {cache: '/tmp'}, {cache: '.'}]) {
+              await assert.rejects(() => parse({TEST: JSON.stringify(test)}));
+            }
+            for (const versions of ['[]', '["8.2","8.2"]', '[8.2]', '["latest"]']) {
+              await assert.rejects(() => parse({VERSIONS: versions}));
+            }
+            core.info('Lint/test configuration checks passed.');
+
+  act:
+    name: Act - Validate Composer project
+    uses: $/.github/workflows/continuous-integration.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      working-directory: tests/php-project
+      php-versions: '["8.2", ""]'
+      test: '{"cache":".phpunit.cache"}'
+      runs-on: '["ubuntu-24.04"]'
+      dependency-review: false
+  checks-disabled:
+    name: Act - Disable checks
+    uses: $/.github/workflows/continuous-integration.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      working-directory: tests/php-project
+      checks: false
+      lint: must-not-run
+      test: must-not-run
+      package: "true"
