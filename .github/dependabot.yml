@@ -1,6 +1,9 @@
 version: 2
 updates:
   - package-ecosystem: docker
+    commit-message:
+      prefix: build
+      include: scope
     open-pull-requests-limit: 20
     directory: /
     schedule:
@@ -14,6 +17,9 @@ updates:
     cooldown:
       default-days: 7
   - package-ecosystem: github-actions
+    commit-message:
+      prefix: build
+      include: scope
     open-pull-requests-limit: 20
     directories:
       - /
@@ -29,6 +35,9 @@ updates:
     cooldown:
       default-days: 7
   - package-ecosystem: composer
+    commit-message:
+      prefix: build
+      include: scope
     open-pull-requests-limit: 20
     versioning-strategy: increase
     directories:
@@ -45,6 +54,9 @@ updates:
     cooldown:
       default-days: 7
   - package-ecosystem: devcontainers
+    commit-message:
+      prefix: build
+      include: scope
     open-pull-requests-limit: 20
     directory: /
     schedule:
