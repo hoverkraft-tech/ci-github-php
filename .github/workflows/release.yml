@@ -173,7 +173,7 @@ jobs:
               throw new Error('Declare a public Composer package without a hardcoded version.');
             }
       - id: verify
-        uses: hoverkraft-tech/ci-github-publish/actions/release/verify@d983bd6279de308518b8b8df7c51e179fd50bffb # 2.1.0
+        uses: hoverkraft-tech/ci-github-publish/actions/release/verify@b942fb00f3115ca70f98f45f2289cc9838eb9312 # 3.0.0
         with:
           tags: ${{ format('["{0}"]', inputs.tag) }}
           require-tags: ${{ startsWith(github.ref, 'refs/tags/') }}
@@ -187,9 +187,9 @@ jobs:
       contents: write
       pull-requests: read
     steps:
-      - uses: hoverkraft-tech/ci-github-publish/actions/release/create@d983bd6279de308518b8b8df7c51e179fd50bffb # 2.1.0
+      - uses: hoverkraft-tech/ci-github-publish/actions/release/create@b942fb00f3115ca70f98f45f2289cc9838eb9312 # 3.0.0
         with:
           tag: ${{ inputs.tag }}
-          target-sha: ${{ github.sha }}
-          release-config: ${{ inputs.release-config }}
+          target-ref: ${{ github.sha }}
+          config-overrides: ${{ inputs.release-config }}
           changelog-summary: ${{ secrets.changelog-summary || inputs.changelog-summary }}

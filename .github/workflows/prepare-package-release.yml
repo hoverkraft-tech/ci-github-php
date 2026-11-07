@@ -48,17 +48,17 @@ jobs:
             }
       - id: plan
         if: "!startsWith(github.ref, 'refs/tags/')"
-        uses: hoverkraft-tech/ci-github-publish/actions/release/plan@d983bd6279de308518b8b8df7c51e179fd50bffb # 2.1.0
+        uses: hoverkraft-tech/ci-github-publish/actions/release/plan@b942fb00f3115ca70f98f45f2289cc9838eb9312 # 3.0.0
         with:
-          release-config: ${{ inputs.release-config }}
-          target-sha: ${{ github.sha }}
+          config-overrides: ${{ inputs.release-config }}
+          target-ref: ${{ github.sha }}
           force: ${{ github.event_name == 'workflow_dispatch' && inputs.force }}
       - id: identity
         name: Check Composer version format
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           TAG: ${{ steps.plan.outputs.tag }}
-          HAS_CHANGES: ${{ steps.plan.outputs.has-changes }}
+          HAS_CHANGES: ${{ steps.plan.outputs.should-release }}
         with:
           script: |-
             const retry = context.ref.startsWith('refs/tags/');
@@ -70,7 +70,7 @@ jobs:
             core.setOutput('tag', tag);
       - id: verify
         if: steps.identity.outputs.has-changes == 'true'
-        uses: hoverkraft-tech/ci-github-publish/actions/release/verify@d983bd6279de308518b8b8df7c51e179fd50bffb # 2.1.0
+        uses: hoverkraft-tech/ci-github-publish/actions/release/verify@b942fb00f3115ca70f98f45f2289cc9838eb9312 # 3.0.0
         with:
           tags: ${{ format('["{0}"]', steps.identity.outputs.tag) }}
           require-tags: ${{ startsWith(github.ref, 'refs/tags/') }}
