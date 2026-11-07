@@ -47,7 +47,11 @@ then regenerate using that tool. The CI and release workflows include their auth
 regeneration writes them to the corresponding `.github/workflows/*.md` files.
 
 Dependabot updates GitHub Actions, Composer fixtures, containers, and development
-containers. Renovate follows the common Hoverkraft maintenance workflow for
+containers. Each ecosystem explicitly uses the `build` commit prefix with a
+dependency scope. Commitlint's default rules apply to contributors and Dependabot;
+the semantic pull request workflow also validates every PR title.
+
+Renovate follows the common Hoverkraft maintenance workflow for
 Docker action references, the root `.php-version`, and the Composer bootstrap
 version. The maintenance workflow receives its GitHub App credentials from this
 repository's CI bot configuration; public reusable workflows do not assume those
