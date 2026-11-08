@@ -3,7 +3,7 @@
 # GitHub Reusable Workflow: Continuous integration
 
 <div align="center">
-  <img src="https://opengraph.githubassets.com/7952085af0a270f3e7c5ffa94dd3d14b478b2cf4dece0a52f44539818a8d0288/hoverkraft-tech/ci-github-php" width="60px" align="center" alt="Continuous integration" />
+  <img src="https://opengraph.githubassets.com/59b0ffef8f4e83fecddec182e9181306c3ece57c4be582ad511d8a14d8d84a41/hoverkraft-tech/ci-github-php" width="60px" align="center" alt="Continuous integration" />
 </div>
 
 ---
