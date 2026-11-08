@@ -11,7 +11,12 @@ workflow validates Composer metadata and tag identity before publication.
 public CI and documentation workflows. The Composer fixture covers automatic and explicit tool installation,
 lockfile and lockfile-free setup, installation hooks, PHPUnit reports, and PHPStan.
 Test-action cases cover Composer-owned report generation, coverage publication,
-preparation, custom commands, and failure propagation. Package integration tests create independent Git
+preparation, custom commands, and failure propagation. Dedicated lint and test
+workflows retrieve native artifacts from successful and failed commands, check
+that hidden project paths work without uploading unrelated files, and verify
+empty artifact outputs when no reports are produced. Read-only jobs exercise
+the default comment policy; separate jobs verify opt-in comments with collapsed
+details. Package integration tests create independent Git
 repositories and exercise distribution omissions, consumer commands, archive
 immutability, and cleanup.
 

@@ -15,6 +15,11 @@
 
 Run Composer tests and report results, optionally uploading coverage.
 
+Native test reports and GitHub coverage reports are retained for seven days,
+including after command failures. Only parsed report files are uploaded.
+Keep `comment: false` and call the common `ci-reports` workflow after producer
+jobs for consolidated comments with collapsed details.
+
 <!-- overview:end -->
 <!-- usage:start -->
 
@@ -45,6 +50,10 @@ Run Composer tests and report results, optionally uploading coverage.
     # Coverage destination: `github` for report parsing, `codecov` for OIDC upload, or empty to disable coverage publication. Coverage files must be produced by the test command.
     # Default: `github`
     coverage: github
+
+    # Publish an individual test and coverage PR comment. Requires pull-requests write permission. Fork comments are disabled. Leave false for consolidated reporting; annotations, summaries and artifacts remain enabled.
+    # Default: `false`
+    comment: "false"
 ```
 
 <!-- usage:end -->
@@ -52,26 +61,34 @@ Run Composer tests and report results, optionally uploading coverage.
 
 ## Inputs
 
-| **Input**               | **Description**                                                                                                                                                              | **Required** | **Default** |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ----------- |
-| **`working-directory`** | Composer project directory. Run setup-php first to install its dependencies.                                                                                                 | **false**    | `.`         |
-| **`command`**           | Composer script to execute unchanged, normally `test:ci` in composer.json.                                                                                                   | **false**    | `test:ci`   |
-|                         | The project defines its test tool, preparation and report generation. Examples:                                                                                              |              |             |
-|                         |                                                                                                                                                                              |              |             |
-|                         | - PHPUnit: `phpunit --configuration phpunit.xml --log-junit=junit.xml --coverage-cobertura=cobertura.xml`                                                                    |              |             |
-|                         | - Pest: `pest --ci --log-junit=junit.xml --coverage-cobertura=cobertura.xml`                                                                                                 |              |             |
-|                         | - Codeception: `codecept run --xml=junit.xml --coverage-xml=clover.xml`;                                                                                                     |              |             |
-|                         | enable coverage in codeception.yml and select `coverage: codecov` for its Clover XML.                                                                                        |              |             |
-|                         |                                                                                                                                                                              |              |             |
-|                         | For Codecov, PHPUnit and Pest can use `--coverage-clover=clover.xml`.                                                                                                        |              |             |
-|                         | Omit coverage arguments when collection is not needed. The coverage input controls publication only.                                                                         |              |             |
-|                         | See the [CI guide](../../.github/workflows/continuous-integration.md).                                                                                                       |              |             |
-| **`coverage`**          | Coverage destination: `github` for report parsing, `codecov` for OIDC upload, or empty to disable coverage publication. Coverage files must be produced by the test command. | **false**    | `github`    |
+| **Input**               | **Description**                                                                                                                                                                                                       | **Required** | **Default** |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ----------- |
+| **`working-directory`** | Composer project directory. Run setup-php first to install its dependencies.                                                                                                                                          | **false**    | `.`         |
+| **`command`**           | Composer script to execute unchanged, normally `test:ci` in composer.json.                                                                                                                                            | **false**    | `test:ci`   |
+|                         | The project defines its test tool, preparation and report generation. Examples:                                                                                                                                       |              |             |
+|                         |                                                                                                                                                                                                                       |              |             |
+|                         | - PHPUnit: `phpunit --configuration phpunit.xml --log-junit=junit.xml --coverage-cobertura=cobertura.xml`                                                                                                             |              |             |
+|                         | - Pest: `pest --ci --log-junit=junit.xml --coverage-cobertura=cobertura.xml`                                                                                                                                          |              |             |
+|                         | - Codeception: `codecept run --xml=junit.xml --coverage-xml=clover.xml`;                                                                                                                                              |              |             |
+|                         | enable coverage in codeception.yml and select `coverage: codecov` for its Clover XML.                                                                                                                                 |              |             |
+|                         |                                                                                                                                                                                                                       |              |             |
+|                         | For Codecov, PHPUnit and Pest can use `--coverage-clover=clover.xml`.                                                                                                                                                 |              |             |
+|                         | Omit coverage arguments when collection is not needed. The coverage input controls publication only.                                                                                                                  |              |             |
+|                         | See the [CI guide](../../.github/workflows/continuous-integration.md).                                                                                                                                                |              |             |
+| **`coverage`**          | Coverage destination: `github` for report parsing, `codecov` for OIDC upload, or empty to disable coverage publication. Coverage files must be produced by the test command.                                          | **false**    | `github`    |
+| **`comment`**           | Publish an individual test and coverage PR comment. Requires pull-requests write permission. Fork comments are disabled. Leave false for consolidated reporting; annotations, summaries and artifacts remain enabled. | **false**    | `false`     |
 
 <!-- inputs:end -->
 <!-- secrets:start -->
 <!-- secrets:end -->
 <!-- outputs:start -->
+
+## Outputs
+
+| **Output**               | **Description**                                                                                                   |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| **`report-artifact-id`** | Native report artifact ID, empty when no supported reports were parsed. Coverage is included only in GitHub mode. |
+
 <!-- outputs:end -->
 <!-- badges:start -->
 

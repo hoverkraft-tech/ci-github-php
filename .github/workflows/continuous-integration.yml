@@ -82,6 +82,40 @@
 # Cobertura. Add generated report files to `.gitignore`. Clean any retained report
 # files in your project command if it reuses an existing workspace.
 #
+# The lint and test actions upload only parsed native reports, including after a
+# failed command, and retain them for seven days. Their `report-artifact-id`
+# output identifies the artifact; it is empty when no supported reports were
+# found. Test artifacts include coverage only with `coverage: github`.
+# Codecov upload remains separate. Console-only lint output creates no artifact;
+# configure a supported file report such as PHPStan Checkstyle for consolidation.
+#
+# Individual comments are disabled by default, keeping producer jobs read-only.
+# When calling an action directly, set `comment: true` and grant
+# `pull-requests: write` to opt in. Human and bot actors follow the same rules;
+# fork PRs keep summaries, annotations and artifacts without commenting.
+#
+# For custom producer jobs named `lint` and `test`, leave individual comments
+# disabled and add one final job using the common reporting workflow:
+#
+# ```yaml
+# reports:
+#   needs: [lint, test]
+#   if: always()
+#   uses: hoverkraft-tech/ci-github-common/.github/workflows/ci-reports.yml@90211d735aa0289702ddbd7eb95b218020ccadad # 2.0.2
+#   permissions:
+#     contents: read
+#     pull-requests: write
+#   with:
+#     job-results: ${{ toJSON(needs) }}
+# ```
+#
+# This updates one comment each for tests, coverage and lint, with details
+# collapsed. Keep producer job IDs aligned with the shared reporter's contract;
+# when wrapping producers in reusable workflows, use matching caller and inner
+# job IDs. The full CI workflow uses inner `lint` and `test` jobs; use the
+# individual actions when you need to compose them with this final reporter.
+# Keep producer jobs as required checks: report publication does not replace them.
+#
 # Preparation belongs in the Composer script, with report arguments attached only
 # to the test command:
 #

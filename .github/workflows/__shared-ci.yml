@@ -4,7 +4,7 @@ on:
 permissions: {}
 jobs:
   linter:
-    uses: hoverkraft-tech/ci-github-common/.github/workflows/linter.yml@f0baf63a8aa2bcfe9847aee00d1fdfa5e32a749a # 2.0.0
+    uses: hoverkraft-tech/ci-github-common/.github/workflows/linter.yml@90211d735aa0289702ddbd7eb95b218020ccadad # 2.0.2
     permissions:
       contents: read
       statuses: write
@@ -40,6 +40,12 @@ jobs:
     uses: $/.github/workflows/__test-action-test.yml
     permissions:
       contents: read
+      pull-requests: write
+  test-action-lint:
+    uses: $/.github/workflows/__test-action-lint.yml
+    permissions:
+      contents: read
+      pull-requests: write
   test-workflow-documentation:
     uses: $/.github/workflows/__test-workflow-documentation.yml
     permissions:
