@@ -22,6 +22,10 @@ jobs:
             coverage: ""
           - scenario: failing-command
             coverage: ""
+          - scenario: failing-tests
+            coverage: github
+          - scenario: no-reports
+            coverage: ""
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -54,25 +58,40 @@ jobs:
             if (scenario === 'failing-command') {
               manifest.scripts['test:ci'] = ['@test --log-junit=junit.xml --no-coverage', "@php -r 'exit(7);'"];
             }
+            if (scenario === 'failing-tests') {
+              const test = path.join(directory, 'tests/SampleTest.php');
+              await fs.writeFile(test, (await fs.readFile(test, 'utf8')).replace("'sample'", "'unexpected'"));
+            }
+            if (scenario === 'no-reports') manifest.scripts['test:ci'] = "@php -r 'exit(0);'";
             await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+            await fs.writeFile(path.join(directory, '.private-fixture'), 'Must not be uploaded');
             core.setOutput('directory', directory);
       - uses: $/actions/setup-php
         with:
           working-directory: ${{ steps.fixture.outputs.directory }}
           composer-directories: '["."]'
-      - name: Act - Run project tests
+      - name: Act - Run project tests without comment permission
         id: tests
-        continue-on-error: ${{ matrix.scenario == 'failing-command' }}
+        continue-on-error: ${{ startsWith(matrix.scenario, 'failing-') }}
         uses: $/actions/test
         with:
           working-directory: ${{ steps.fixture.outputs.directory }}
           coverage: ${{ matrix.coverage }}
+      - name: Assert - Download the native report artifact
+        if: steps.tests.outputs.report-artifact-id != ''
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ steps.tests.outputs.report-artifact-id }}
+          path: downloaded-reports
+          merge-multiple: true
       - name: Assert - Reports and project preparation
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         env:
           DIRECTORY: ${{ steps.fixture.outputs.directory }}
           OUTCOME: ${{ steps.tests.outcome }}
           SCENARIO: ${{ matrix.scenario }}
+          ARTIFACT_ID: ${{ steps.tests.outputs.report-artifact-id }}
+          COVERAGE: ${{ matrix.coverage }}
         with:
           script: |-
             const assert = require('node:assert/strict');
@@ -80,10 +99,20 @@ jobs:
             const path = require('node:path');
             const directory = process.env.DIRECTORY;
             const scenario = process.env.SCENARIO;
-            assert.equal(process.env.OUTCOME, scenario === 'failing-command' ? 'failure' : 'success');
-            assert.match(fs.readFileSync(path.join(directory, 'junit.xml'), 'utf8'), /<testcase\b/);
+            assert.equal(process.env.OUTCOME, scenario.startsWith('failing-') ? 'failure' : 'success');
+            if (scenario === 'no-reports') {
+              assert.equal(process.env.ARTIFACT_ID, '');
+              return;
+            }
+            assert.match(process.env.ARTIFACT_ID, /^\d+$/);
+            const files = await (await glob.create('downloaded-reports/**/*', {matchDirectories: false})).glob();
+            assert.deepEqual(files.map(file => path.basename(file)).sort(), process.env.COVERAGE === 'github' ? ['cobertura.xml', 'junit.xml'] : ['junit.xml']);
+            for (const file of files) assert.equal(fs.readFileSync(file, 'utf8'), fs.readFileSync(path.join(directory, path.basename(file)), 'utf8'));
+            const junit = fs.readFileSync(path.join(directory, 'junit.xml'), 'utf8');
+            assert.match(junit, /<testcase\b/);
+            assert.equal(junit.includes('<failure'), scenario === 'failing-tests');
             const cobertura = path.join(directory, 'cobertura.xml');
-            if (['reports', 'publication-disabled'].includes(scenario)) {
+            if (['reports', 'publication-disabled', 'failing-tests'].includes(scenario)) {
               assert.match(fs.readFileSync(cobertura, 'utf8'), /<coverage\b[^>]*\bline-rate=/);
             } else {
               assert.equal(fs.existsSync(cobertura), false, 'Only the Composer script controls report generation.');
@@ -91,3 +120,38 @@ jobs:
             if (scenario === 'preparation') {
               assert.equal(fs.readFileSync(path.join(directory, 'prepared.txt'), 'utf8'), 'ready');
             }
+
+  individual-comment:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Arrange - Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Arrange - Install the Composer fixture
+        uses: $/actions/setup-php
+        with:
+          working-directory: tests/php-project
+          composer-directories: '["."]'
+      - name: Act - Publish an individual report
+        uses: $/actions/test
+        with:
+          working-directory: tests/php-project
+          comment: "true"
+      - name: Assert - One comment with collapsed test and coverage details
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const assert = require('node:assert/strict');
+            const pr = context.payload.pull_request;
+            if (context.eventName !== 'pull_request' || pr.head.repo.full_name !== `${context.repo.owner}/${context.repo.repo}`) return;
+            const comments = await github.paginate(github.rest.issues.listComments, {...context.repo, issue_number: pr.number, per_page: 100});
+            const reports = comments.filter(comment => comment.user.login === 'github-actions[bot]' && comment.body.startsWith('PHP test results\n'));
+            assert.equal(reports.length, 1);
+            assert.match(reports[0].body, /<details>/);
+            assert.match(reports[0].body, /Test Results/);
+            assert.match(reports[0].body, /1 passed · 0 failed · 0 skipped/);
+            assert.match(reports[0].body, /Coverage/);

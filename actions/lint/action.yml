@@ -1,5 +1,11 @@
 name: Lint PHP
-description: Run a project-defined Composer lint script and report results.
+description: |
+  Run a project-defined Composer lint script and report results.
+
+  Native lint reports are retained for seven days, including after command
+  failures. Only parsed report files are uploaded. Keep `comment: false` and
+  call the common `ci-reports` workflow after producer jobs for consolidated
+  comments with collapsed details.
 author: hoverkraft
 branding:
   icon: package
@@ -23,6 +29,13 @@ inputs:
       for separate tooling installations, prefix binaries with `tools/vendor/bin/`.
       See the [CI guide](../../.github/workflows/continuous-integration.md).
     default: lint:ci
+  comment:
+    description: Publish an individual lint PR comment. Requires pull-requests write permission. Fork comments are disabled. Leave false for consolidated reporting; annotations, summaries and artifacts remain enabled.
+    default: "false"
+outputs:
+  report-artifact-id:
+    description: Native lint report artifact ID, empty when no supported reports were parsed.
+    value: ${{ steps.upload-reports.outputs.artifact-id }}
 runs:
   using: composite
   steps:
@@ -43,10 +56,37 @@ runs:
             cwd: process.env.WORKING_DIRECTORY,
           });
     - name: Report lint results
+      id: reports
       if: ${{ !cancelled() && steps.directory.outcome == 'success' }}
-      uses: hoverkraft-tech/ci-github-common/actions/quality/parse-ci-reports@5fbb531db839a26ebcc35c4946be279f945f7633 # 1.0.0
+      uses: hoverkraft-tech/ci-github-common/actions/quality/parse-ci-reports@90211d735aa0289702ddbd7eb95b218020ccadad # 2.0.2
       with:
         working-directory: ${{ steps.directory.outputs.absolute-path }}
         report-paths: auto:lint
         report-name: PHP lint
-        output-format: annotations,summary
+        output-format: annotations,summary,markdown
+    - name: Publish individual report comment
+      if: ${{ !cancelled() && inputs.comment == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && steps.reports.outputs.lint-markdown != '' }}
+      uses: hoverkraft-tech/ci-github-common/actions/create-or-update-comment@90211d735aa0289702ddbd7eb95b218020ccadad # 2.0.2
+      with:
+        title: PHP lint results
+        body: ${{ steps.reports.outputs.lint-markdown }}
+    - name: Prepare native report artifact
+      id: report-artifact
+      if: ${{ !cancelled() && steps.reports.outputs.parsed-files != '' }}
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      env:
+        REPORT_FILES: ${{ steps.reports.outputs.parsed-files }}
+      with:
+        script: |
+          core.setOutput('files', JSON.parse(process.env.REPORT_FILES).join('\n'));
+          core.setOutput('id', require('node:crypto').randomUUID());
+    - name: Upload native lint reports
+      id: upload-reports
+      if: ${{ !cancelled() && steps.report-artifact.outputs.files != '' }}
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+      with:
+        name: ci-reports-${{ github.run_attempt }}-${{ github.job }}-${{ steps.report-artifact.outputs.id }}
+        path: ${{ steps.report-artifact.outputs.files }}
+        include-hidden-files: true
+        if-no-files-found: error
+        retention-days: 7

@@ -40,6 +40,12 @@ jobs:
     uses: $/.github/workflows/__test-action-test.yml
     permissions:
       contents: read
+      pull-requests: write
+  test-action-lint:
+    uses: $/.github/workflows/__test-action-lint.yml
+    permissions:
+      contents: read
+      pull-requests: write
   test-workflow-documentation:
     uses: $/.github/workflows/__test-workflow-documentation.yml
     permissions:
