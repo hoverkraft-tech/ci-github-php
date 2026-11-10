@@ -53,19 +53,20 @@ jobs:
 
       - name: Plan release
         id: plan-release
-        uses: hoverkraft-tech/ci-github-publish/actions/release/plan@f06e0e72a76bfca57c34d08d03e5c1914275fd4c # 2.0.0
+        uses: hoverkraft-tech/ci-github-publish/actions/release/plan@4193622a365c0ab0bcbd6645895fd2c3126b72ba # 3.0.2
         with:
-          target-sha: ${{ github.sha }}
+          target-ref: ${{ github.sha }}
+          force: ${{ github.event_name == 'workflow_dispatch' && inputs.force }}
           github-token: ${{ steps.generate-token.outputs.token }}
 
       - name: Create and publish release
-        if: (steps.plan-release.outputs.has-changes == 'true' || (github.event_name == 'workflow_dispatch' && inputs.force)) && steps.plan-release.outputs.tag != ''
-        uses: hoverkraft-tech/ci-github-publish/actions/release/create@f06e0e72a76bfca57c34d08d03e5c1914275fd4c # 2.0.0
+        if: steps.plan-release.outputs.should-release == 'true' && steps.plan-release.outputs.tag != ''
+        uses: hoverkraft-tech/ci-github-publish/actions/release/create@4193622a365c0ab0bcbd6645895fd2c3126b72ba # 3.0.2
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }} # zizmor: ignore[secrets-outside-env] repository secret is scoped to the release summary step
         with:
           tag: ${{ steps.plan-release.outputs.tag }}
-          target-sha: ${{ github.sha }}
+          target-ref: ${{ github.sha }}
           publish: "true"
           changelog-summary: |
             {

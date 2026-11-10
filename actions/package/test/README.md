@@ -21,7 +21,7 @@ Test the committed Composer distribution in an isolated production installation,
 ## Usage
 
 ```yaml
-- uses: hoverkraft-tech/ci-github-php/actions/package/test@fb76668e10ca8ca0be801e1cf6333ae9cf4a2269 # 1.1.0
+- uses: hoverkraft-tech/ci-github-php/actions/package/test@41b42b7c00ad20527f1f40fd8c7a85881e36ea6b # chore/update-actions-stable
   with:
     # Git repository root containing the public composer.json. Set up PHP and Composer first.
     # Default: `.`
