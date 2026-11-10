@@ -3,7 +3,7 @@
 # GitHub Reusable Workflow: Continuous integration
 
 <div align="center">
-  <img src="https://opengraph.githubassets.com/cad1f2f7879d8aec679a94701da9a6d1db8a3fbfe77205fe385236c706242b7d/hoverkraft-tech/ci-github-php" width="60px" align="center" alt="Continuous integration" />
+  <img src="https://opengraph.githubassets.com/c49d1c486499c0cc920b472e06585d607dc90b4134f10a98830b5edc30a8a0b8/hoverkraft-tech/ci-github-php" width="60px" align="center" alt="Continuous integration" />
 </div>
 
 ---
@@ -116,7 +116,7 @@ disabled and add one final job using the common reporting workflow:
 reports:
   needs: [lint, test]
   if: always()
-  uses: hoverkraft-tech/ci-github-common/.github/workflows/ci-reports.yml@90211d735aa0289702ddbd7eb95b218020ccadad # 2.0.2
+  uses: hoverkraft-tech/ci-github-common/.github/workflows/ci-reports.yml@66882b24f9f13e45a6541896a5a7c638cb91c94c # 4.0.0
   permissions:
     contents: read
     pull-requests: write
@@ -228,7 +228,7 @@ on:
 permissions: {}
 jobs:
   continuous-integration:
-    uses: hoverkraft-tech/ci-github-php/.github/workflows/continuous-integration.yml@41b42b7c00ad20527f1f40fd8c7a85881e36ea6b # chore/update-actions-stable
+    uses: hoverkraft-tech/ci-github-php/.github/workflows/continuous-integration.yml@41b42b7c00ad20527f1f40fd8c7a85881e36ea6b # 1.1.1
     permissions:
       contents: read
       id-token: write
