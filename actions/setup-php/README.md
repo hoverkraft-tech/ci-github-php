@@ -21,13 +21,13 @@ Set up PHP and Composer, cache downloads and install project dependencies with o
 ## Usage
 
 ```yaml
-- uses: hoverkraft-tech/ci-github-php/actions/setup-php@7b1303edc25e97da2a297dd285a54cf4b6ae76a1 # 1.1.2
+- uses: hoverkraft-tech/ci-github-php/actions/setup-php@1943175e66ec469d305a36f839048a98191476a8 # feat/composer-php-version-discovery
   with:
     # Project directory relative to the checkout.
     # Default: `.`
     working-directory: .
 
-    # Explicit PHP version. Empty reads the project or repository .php-version, then setup-php platform detection.
+    # Explicit PHP version. Empty honors .php-version and Composer platform overrides, then discovers the highest stable release matching composer.json require.php.
     php-version: ""
 
     # PHP extensions forwarded to shivammathur/setup-php.
@@ -62,7 +62,7 @@ Set up PHP and Composer, cache downloads and install project dependencies with o
 | **Input**                  | **Description**                                                                                                                                                              | **Required** | **Default**                                      |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ------------------------------------------------ |
 | **`working-directory`**    | Project directory relative to the checkout.                                                                                                                                  | **false**    | `.`                                              |
-| **`php-version`**          | Explicit PHP version. Empty reads the project or repository .php-version, then setup-php platform detection.                                                                 | **false**    | -                                                |
+| **`php-version`**          | Explicit PHP version. Empty honors .php-version and Composer platform overrides, then discovers the highest stable release matching composer.json require.php.               | **false**    | -                                                |
 | **`extensions`**           | PHP extensions forwarded to shivammathur/setup-php.                                                                                                                          | **false**    | `mbstring, dom, xml, xmlwriter, curl, zip, intl` |
 | **`coverage`**             | Coverage driver: none, pcov or xdebug.                                                                                                                                       | **false**    | `pcov`                                           |
 | **`composer-directories`** | JSON array of Composer project directories relative to working-directory. Empty installs the root project and tools/composer.json when present, without recursive discovery. | **false**    | -                                                |

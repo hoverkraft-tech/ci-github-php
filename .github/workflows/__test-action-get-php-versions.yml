@@ -1,0 +1,137 @@
+name: Internal - Test Composer PHP version discovery
+on:
+  workflow_call:
+permissions: {}
+jobs:
+  unit:
+    uses: $/.github/workflows/continuous-integration.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      working-directory: actions/get-php-versions
+      lint: "false"
+      dependency-review: false
+  integration:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Arrange - Composer is the only version declaration
+        run: |
+          rm .php-version
+          php -r 'echo PHP_VERSION;' > "$RUNNER_TEMP/php-version-before"
+          chmod 600 tests/php-project/composer.json
+      - name: Act - Discover releases for a nested Composer project
+        id: versions
+        uses: $/actions/get-php-versions
+        with:
+          working-directory: tests/php-project
+      - name: Assert - Discovery preserves the runner PHP installation
+        run: test "$(php -r 'echo PHP_VERSION;')" = "$(cat "$RUNNER_TEMP/php-version-before")"
+      - name: Act - Set up the highest compatible release
+        id: setup
+        uses: $/actions/setup-php
+        with:
+          working-directory: ${{ github.workspace }}/tests/php-project
+          install-dependencies: "false"
+      - name: Assert - Setup and discovery agree
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          VERSIONS: ${{ steps.versions.outputs.php-versions }}
+          HIGHEST: ${{ steps.versions.outputs.php-version }}
+          INSTALLED: ${{ steps.setup.outputs.php-version }}
+        with:
+          script: |
+            const assert = require('node:assert/strict');
+            const versions = JSON.parse(process.env.VERSIONS);
+            assert.ok(versions.length > 1, 'Discover every compatible stable minor, not only one default');
+            assert.equal(versions.at(-1), process.env.HIGHEST);
+            assert.equal(process.env.INSTALLED, process.env.HIGHEST.split('.').slice(0, 2).join('.'));
+            const {stdout} = await exec.getExecOutput('php', ['-r', 'echo PHP_VERSION;'], {silent: true});
+            assert.equal(stdout.trim(), process.env.HIGHEST);
+      - name: Arrange - Project version file overrides automatic selection
+        run: echo '8.2' > tests/php-project/.php-version
+      - name: Act - Honor the version file
+        id: file
+        uses: $/actions/setup-php
+        with:
+          working-directory: tests/php-project
+          install-dependencies: "false"
+      - name: Act - Explicit version overrides the version file
+        id: explicit
+        uses: $/actions/setup-php
+        with:
+          working-directory: tests/php-project
+          php-version: "8.3"
+          install-dependencies: "false"
+      - name: Assert - Overrides are preserved
+        env:
+          FILE_VERSION: ${{ steps.file.outputs.php-version }}
+          EXPLICIT_VERSION: ${{ steps.explicit.outputs.php-version }}
+        run: |
+          test "$FILE_VERSION" = '8.2'
+          test "$EXPLICIT_VERSION" = '8.3'
+      - name: Arrange - Composer platform override
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const fs = require('node:fs');
+            fs.rmSync('tests/php-project/.php-version');
+            fs.rmSync('tests/php-project/composer.lock');
+            const manifest = JSON.parse(fs.readFileSync('tests/php-project/composer.json', 'utf8'));
+            manifest.config = {...manifest.config, platform: {php: '8.2.0'}};
+            fs.writeFileSync('tests/php-project/composer.json', JSON.stringify(manifest));
+      - name: Act - Honor Composer platform selection
+        id: platform
+        uses: $/actions/setup-php
+        with:
+          working-directory: tests/php-project
+          install-dependencies: "false"
+      - name: Assert - Composer platform override is preserved
+        env:
+          PLATFORM_VERSION: ${{ steps.platform.outputs.php-version }}
+        run: test "$PLATFORM_VERSION" = '8.2'
+      - name: Act - Resolve the local Docker build runtime
+        id: docker
+        run: |
+          docker build --tag php-version-resolver actions/get-php-versions
+          test "$(docker run --rm --entrypoint id php-version-resolver -u)" -ne 0
+          version=$(docker run --rm --user "$(id -u):$(id -g)" --volume "$GITHUB_WORKSPACE/tests/php-project:/project:ro" php-version-resolver)
+          printf 'version=%s\n' "$version" >> "$GITHUB_OUTPUT"
+      - name: Assert - Local builds use the same Composer constraint
+        env:
+          DOCKER_VERSION: ${{ steps.docker.outputs.version }}
+          ACTION_VERSION: ${{ steps.versions.outputs.php-version }}
+        run: test "$DOCKER_VERSION" = "$ACTION_VERSION"
+      - name: Arrange - Project symlink escapes the checkout
+        run: ln -s /tmp tests/php-project/outside
+      - name: Act - Reject a directory outside the checkout
+        id: outside
+        continue-on-error: true
+        uses: $/actions/get-php-versions
+        with:
+          working-directory: ..
+      - name: Act - Reject a symlink outside the checkout
+        id: symlink
+        continue-on-error: true
+        uses: $/actions/get-php-versions
+        with:
+          working-directory: tests/php-project/outside
+      - name: Assert - Invalid paths fail without outputs
+        env:
+          OUTSIDE_OUTCOME: ${{ steps.outside.outcome }}
+          SYMLINK_OUTCOME: ${{ steps.symlink.outcome }}
+          OUTSIDE_OUTPUTS: ${{ toJSON(steps.outside.outputs) }}
+          SYMLINK_OUTPUTS: ${{ toJSON(steps.symlink.outputs) }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const assert = require('node:assert/strict');
+            for (const scenario of ['OUTSIDE', 'SYMLINK']) {
+              assert.equal(process.env[`${scenario}_OUTCOME`], 'failure');
+              assert.ok(Object.values(JSON.parse(process.env[`${scenario}_OUTPUTS`])).every(value => value === ''));
+            }

@@ -27,9 +27,13 @@ deps-audit: ## Audit action and fixture dependencies
 		composer --working-dir="$$directory" --no-interaction --no-plugins audit; \
 	done
 
-test: ## Run fixture lint and PHPUnit
+test: ## Run fixture lint and Composer project tests
 	composer --working-dir=tests/php-project lint:ci
-	composer --working-dir=tests/php-project test
+	@set -e; for directory in $(COMPOSER_DIRECTORIES); do \
+		if php -r 'exit(isset(json_decode(file_get_contents($$argv[1]), true)["scripts"]["test"]) ? 0 : 1);' "$$directory/composer.json"; then \
+			composer --working-dir="$$directory" test; \
+		fi; \
+	done
 
 ci: ## Install, audit, test and lint without rewriting source files
 	$(MAKE) deps-install

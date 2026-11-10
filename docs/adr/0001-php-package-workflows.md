@@ -70,6 +70,46 @@ The initial package scope is one public Composer package at a Git repository roo
 Private registry authentication, splitting monorepos, prerelease channels, and
 application deployment targets need concrete consumers before adding interfaces.
 
+## Composer-based PHP version discovery
+
+The 2026-11-11 review replaces the default single-runtime CI selection with a
+matrix derived from `composer.json`'s `require.php`. The same standalone resolver
+selects the highest matching runtime for setup and local Docker builds. PHP.net
+supplies released versions; Composer's own SemVer library handles constraints,
+including tilde semantics, disjunctions, exclusions and patch bounds. Keep the
+newest matching patch for each minor and exclude prereleases. End-of-life minors
+remain in the matrix when the project still declares support for them.
+
+Explicit workflow matrices, setup inputs, version files and Composer platform
+overrides remain available. A version file affects default setup, not the
+automatically discovered CI compatibility matrix. Projects need not copy their
+supported versions into a matrix, a default-runtime file and a Makefile.
+
+Discovery requires network access and fails clearly when the catalog or constraint
+is unavailable. It never falls back to an unconstrained latest release. The
+resolver uses the PHP runtime and locked Composer dependency in its Docker image;
+that tooling runtime does not change the versions supported by consumer packages.
+The action and local Docker entry point share the exact resolver and require no host PHP.
+
+Docker execution replaces the initial PHP/Composer bootstrap on the runner. It
+requires Linux with Docker. The entry point validates paths against the mounted
+workspace; project dependencies and hooks are never executed.
+
+The same-day security review supersedes native Docker-action execution, which
+required the root user and scanner exceptions for GitHub's workspace/output mounts.
+The image defaults to an unprivileged user. A composite step uses `github-script`'s
+`exec` helper to build it and run it with the runner's UID/GID and a read-only
+checkout mount. `core` publishes the JSON outputs from the host, so the container
+needs no writable output mount. Trivy and Checkov retain their default-user checks
+without exceptions. Dependabot's recursive action directories cover the resolver's
+Composer manifest and lockfile as well as its Docker base image.
+
+The same review rejects a separately configured resolver revision in each Makefile.
+Local builds derive it from the existing workflow commit pins, keeping dependency
+updates effective for both CI and local tooling. Missing or conflicting pins fail
+before fetching the resolver. This couples automatic local selection to a checkout
+with consistent workflow pins; an explicit PHP version bypasses discovery.
+
 ## Alternatives
 
 Copying npm's version-update step would introduce source churn that Composer does

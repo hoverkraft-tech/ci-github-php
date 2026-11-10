@@ -1,0 +1,122 @@
+# ### PHP version selection
+#
+# Declare supported PHP versions in `composer.json`:
+#
+# ```json
+# {
+#   "require": {
+#     "php": "^8.2"
+#   }
+# }
+# ```
+#
+# The CI workflow discovers stable releases allowed by that constraint and tests
+# the newest matching patch of each minor. Its highest version runs lint and package
+# checks and publishes coverage. A new stable minor is included when the constraint
+# already allows it. Explicitly restricted ranges require a deliberate Composer change
+# before CI adds another minor. End-of-life versions remain tested when still allowed.
+#
+# Discovery uses PHP.net release metadata and Composer's constraint parser. It handles
+# patch bounds and disjoint ranges without approximating them as npm SemVer.
+# Prereleases are excluded. A missing or invalid `require.php`, an unavailable release
+# catalog, or a constraint with no matching stable release causes an error. Dependency
+# installation still validates the project and tooling against the selected runtime.
+#
+# The discovery action builds and runs its Docker image on Linux runners with Docker,
+# using the runner's UID/GID and a read-only checkout mount.
+# CI and local builds use the same container runtime and locked dependencies. Discovery
+# does not change PHP on the runner. The setup action then installs the selected PHP
+# version when the job needs it.
+#
+# ### Overrides
+#
+# `php-versions` overrides the CI matrix. Its last entry is primary. Automatic matrix
+# discovery uses `require.php` even when a `.php-version` file exists.
+#
+# The setup action selects its runtime in this order:
+#
+# 1. Its explicit `php-version` input.
+# 2. The project `.php-version`, then the repository `.php-version`.
+# 3. Composer platform overrides, as supported by `shivammathur/setup-php`.
+# 4. The highest stable PHP release allowed by `require.php`.
+#
+# Version files are optional. Ordinary consumers need only their Composer constraint.
+# The standalone `get-php-versions` action exposes both the full matrix and its highest
+# version for custom jobs; discovery does not install project dependencies or run hooks.
+#
+# ### Local Docker builds
+#
+# Local builds read the resolver revision from the existing `ci-github-php` workflow
+# pins in the checkout. Dependency updates to those workflow pins also update local
+# builds. No separate resolver revision needs configuration. Its Docker entry point
+# reads the project through a read-only mount and requires no PHP on the host.
+#
+# ```sh
+# set -eu
+# workflow_ref=$(grep -hE '^[[:space:]]*(-[[:space:]]*)?uses:' .github/workflows/*.y*ml |
+#   grep -oE 'hoverkraft-tech/ci-github-php/[^@[:space:]]+@[a-f0-9]{40}' |
+#   cut -d@ -f2 | sort -u)
+# if [ "${#workflow_ref}" -ne 40 ]; then
+#   echo 'Expected one consistent ci-github-php commit pin in .github/workflows.' >&2
+#   exit 1
+# fi
+# docker build --tag php-version-resolver \
+#   "https://github.com/hoverkraft-tech/ci-github-php.git#${workflow_ref}:actions/get-php-versions"
+# PHP_VERSION=$(docker run --rm --volume "$PWD:/project:ro" php-version-resolver)
+# docker build --build-arg "VERSION=$PHP_VERSION" .
+# ```
+#
+# Automatic selection requires workflow files with one consistent commit pin for
+# `ci-github-php`. Missing or conflicting pins stop the build before fetching the
+# resolver. Explicit `PHP_VERSION` overrides in the consumer Makefiles skip discovery.
+#
+# Docker caches the resolver image's dependencies. Each invocation consults the release
+# catalog, so newly available compatible releases need no Makefile version edit. The
+# resolver prints the highest matching patch by default. Pass `/project` as its only
+# argument to print the complete JSON result instead.
+#
+# Local Makefiles can keep a `PHP_VERSION` override for explicit compatibility testing.
+# When no override is supplied, use the resolver for the build and a stable local
+# development image name for subsequent commands.
+name: Get PHP versions
+description: Discover stable PHP releases matching composer.json require.php using Composer constraints. Runs in Docker on Linux without changing the runner's PHP installation.
+author: hoverkraft
+branding:
+  icon: list
+  color: blue
+inputs:
+  working-directory:
+    description: Project directory relative to the checkout.
+    default: .
+outputs:
+  php-versions:
+    description: JSON array of matching releases, with the newest compatible patch per minor, sorted ascending. Includes end-of-life versions allowed by require.php; excludes prereleases.
+    value: ${{ steps.versions.outputs.php-versions }}
+  php-version:
+    description: Highest stable PHP release matching require.php.
+    value: ${{ steps.versions.outputs.php-version }}
+# FIXME: Replace this PHP bridge with the native Node.js action once a stable
+# composer-semver release includes https://github.com/shyim/composer-semver-ts/pull/1
+# and passes the Composer constraint compatibility tests in the migration PR.
+runs:
+  using: composite
+  steps:
+    - id: versions
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        WORKING_DIRECTORY: ${{ inputs.working-directory }}
+      with:
+        script: |
+          const image = await exec.getExecOutput('docker', ['build', '--quiet', process.env.ACTION_PATH]);
+          const {stdout} = await exec.getExecOutput('docker', [
+            'run', '--rm',
+            '--user', `${process.getuid()}:${process.getgid()}`,
+            '--volume', `${process.env.GITHUB_WORKSPACE}:/project:ro`,
+            '--workdir', '/project',
+            '--env', 'GITHUB_WORKSPACE=/project',
+            image.stdout.trim(), process.env.WORKING_DIRECTORY,
+          ]);
+          const versions = JSON.parse(stdout);
+          core.setOutput('php-versions', versions['php-versions']);
+          core.setOutput('php-version', versions['php-version']);

@@ -5,7 +5,9 @@ updates:
       prefix: build
       include: scope
     open-pull-requests-limit: 20
-    directory: /
+    directories:
+      - /
+      - /actions/**/*
     schedule:
       interval: weekly
       day: friday
@@ -41,6 +43,7 @@ updates:
     open-pull-requests-limit: 20
     versioning-strategy: increase
     directories:
+      - /actions/**/*
       - /tests/php-project
       - /tests/php-project/tools
     schedule:
