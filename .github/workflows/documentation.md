@@ -3,7 +3,7 @@
 # GitHub Reusable Workflow: Build PHP documentation
 
 <div align="center">
-  <img src="https://opengraph.githubassets.com/c49d1c486499c0cc920b472e06585d607dc90b4134f10a98830b5edc30a8a0b8/hoverkraft-tech/ci-github-php" width="60px" align="center" alt="Build PHP documentation" />
+  <img src="https://opengraph.githubassets.com/a34afe6048695ba84de01344b4411e2ff7f3d84ff89656758648d934c793f392/hoverkraft-tech/ci-github-php" width="60px" align="center" alt="Build PHP documentation" />
 </div>
 
 ---
@@ -38,7 +38,7 @@ on:
 permissions: {}
 jobs:
   documentation:
-    uses: hoverkraft-tech/ci-github-php/.github/workflows/documentation.yml@41b42b7c00ad20527f1f40fd8c7a85881e36ea6b # 1.1.1
+    uses: hoverkraft-tech/ci-github-php/.github/workflows/documentation.yml@7b1303edc25e97da2a297dd285a54cf4b6ae76a1 # 1.1.2
     permissions:
       contents: read
     with:

@@ -3,7 +3,7 @@
 # ![Icon](data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGNsYXNzPSJmZWF0aGVyIGZlYXRoZXItcGFja2FnZSIgY29sb3I9ImJsdWUiPjxsaW5lIHgxPSIxNi41IiB5MT0iOS40IiB4Mj0iNy41IiB5Mj0iNC4yMSI+PC9saW5lPjxwYXRoIGQ9Ik0yMSAxNlY4YTIgMiAwIDAgMC0xLTEuNzNsLTctNGEyIDIgMCAwIDAtMiAwbC03IDRBMiAyIDAgMCAwIDMgOHY4YTIgMiAwIDAgMCAxIDEuNzNsNyA0YTIgMiAwIDAgMCAyIDBsNy00QTIgMiAwIDAgMCAyMSAxNnoiPjwvcGF0aD48cG9seWxpbmUgcG9pbnRzPSIzLjI3IDYuOTYgMTIgMTIuMDEgMjAuNzMgNi45NiI+PC9wb2x5bGluZT48bGluZSB4MT0iMTIiIHkxPSIyMi4wOCIgeDI9IjEyIiB5Mj0iMTIiPjwvbGluZT48L3N2Zz4=) GitHub Action: Test PHP
 
 <div align="center">
-  <img src="https://opengraph.githubassets.com/c49d1c486499c0cc920b472e06585d607dc90b4134f10a98830b5edc30a8a0b8/hoverkraft-tech/ci-github-php" width="60px" align="center" alt="Test PHP" />
+  <img src="https://opengraph.githubassets.com/a34afe6048695ba84de01344b4411e2ff7f3d84ff89656758648d934c793f392/hoverkraft-tech/ci-github-php" width="60px" align="center" alt="Test PHP" />
 </div>
 
 ---
@@ -26,7 +26,7 @@ jobs for consolidated comments with collapsed details.
 ## Usage
 
 ```yaml
-- uses: hoverkraft-tech/ci-github-php/actions/test@41b42b7c00ad20527f1f40fd8c7a85881e36ea6b # 1.1.1
+- uses: hoverkraft-tech/ci-github-php/actions/test@7b1303edc25e97da2a297dd285a54cf4b6ae76a1 # 1.1.2
   with:
     # Composer project directory. Run setup-php first to install its dependencies.
     # Default: `.`
