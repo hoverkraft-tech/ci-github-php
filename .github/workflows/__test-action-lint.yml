@@ -1,16 +1,20 @@
 name: Internal - Test PHP lint action
 on:
   workflow_call:
+    inputs:
+      scenario:
+        description: Integration scenario to run.
+        required: true
+        type: string
 permissions: {}
 jobs:
   lint:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        scenario: [success, failure, no-reports]
+    outputs:
+      report-artifact-id: ${{ steps.lint.outputs.report-artifact-id }}
+      expected-reports: ${{ steps.assert.outputs.expected-reports }}
     steps:
       - name: Arrange - Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -19,7 +23,7 @@ jobs:
       - name: Arrange - Configure native PHPStan reports
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          SCENARIO: ${{ matrix.scenario }}
+          SCENARIO: ${{ inputs.scenario }}
         with:
           script: |
             const fs = require('node:fs/promises');
@@ -42,21 +46,16 @@ jobs:
           coverage: none
       - name: Act - Lint without comment permission
         id: lint
-        continue-on-error: ${{ matrix.scenario == 'failure' }}
+        # The assertion below checks the exact expected outcome for every scenario.
+        continue-on-error: true
         uses: $/actions/lint
         with:
           working-directory: .test-php-lint
-      - name: Assert - Download the native lint artifact
-        if: steps.lint.outputs.report-artifact-id != ''
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          artifact-ids: ${{ steps.lint.outputs.report-artifact-id }}
-          path: downloaded-reports
-          merge-multiple: true
-      - name: Assert - Preserve failures and upload only parsed reports
+      - name: Assert - Preserve failures and identify the native report
+        id: assert
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          SCENARIO: ${{ matrix.scenario }}
+          SCENARIO: ${{ inputs.scenario }}
           OUTCOME: ${{ steps.lint.outcome }}
           ARTIFACT_ID: ${{ steps.lint.outputs.report-artifact-id }}
         with:
@@ -69,14 +68,22 @@ jobs:
               return;
             }
             assert.match(process.env.ARTIFACT_ID, /^\d+$/);
-            const files = await (await glob.create('downloaded-reports/**/*', {matchDirectories: false})).glob();
-            assert.equal(files.length, 1);
-            const report = fs.readFileSync(files[0], 'utf8');
-            assert.equal(report, fs.readFileSync('.test-php-lint/phpstan-checkstyle.xml', 'utf8'));
+            const {createHash} = require('node:crypto');
+            const report = fs.readFileSync('.test-php-lint/phpstan-checkstyle.xml', 'utf8');
+            core.setOutput('expected-reports', {'phpstan-checkstyle.xml': createHash('sha256').update(report).digest('hex')});
             assert.match(report, /<checkstyle\b/);
             assert.equal(report.includes('<error'), process.env.SCENARIO === 'failure');
 
+  verify-reports:
+    needs: lint
+    if: needs.lint.outputs.report-artifact-id != ''
+    uses: $/.github/workflows/__assert-report-artifact.yml
+    with:
+      artifact-id: ${{ needs.lint.outputs.report-artifact-id }}
+      expected-reports: ${{ needs.lint.outputs.expected-reports }}
+
   individual-comment:
+    if: inputs.scenario == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read

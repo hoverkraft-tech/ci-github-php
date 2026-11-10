@@ -1,31 +1,21 @@
 name: Internal - Test PHP test action
 on:
-  workflow_call: null
+  workflow_call:
+    inputs:
+      scenario:
+        description: Integration scenario to run.
+        required: true
+        type: string
 permissions: {}
 jobs:
   test:
-    name: Test (${{ matrix.scenario }})
+    name: Test (${{ inputs.scenario }})
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - scenario: reports
-            coverage: github
-          - scenario: publication-disabled
-            coverage: ""
-          - scenario: preparation
-            coverage: ""
-          - scenario: composer-command
-            coverage: ""
-          - scenario: failing-command
-            coverage: ""
-          - scenario: failing-tests
-            coverage: github
-          - scenario: no-reports
-            coverage: ""
+    outputs:
+      report-artifact-id: ${{ steps.tests.outputs.report-artifact-id }}
+      expected-reports: ${{ steps.assert.outputs.expected-reports }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -34,7 +24,7 @@ jobs:
         id: fixture
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         env:
-          SCENARIO: ${{ matrix.scenario }}
+          SCENARIO: ${{ inputs.scenario }}
         with:
           script: |-
             const fs = require('node:fs/promises');
@@ -72,26 +62,21 @@ jobs:
           composer-directories: '["."]'
       - name: Act - Run project tests without comment permission
         id: tests
-        continue-on-error: ${{ startsWith(matrix.scenario, 'failing-') }}
+        # The assertion below checks the exact expected outcome for every scenario.
+        continue-on-error: true
         uses: $/actions/test
         with:
           working-directory: ${{ steps.fixture.outputs.directory }}
-          coverage: ${{ matrix.coverage }}
-      - name: Assert - Download the native report artifact
-        if: steps.tests.outputs.report-artifact-id != ''
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          artifact-ids: ${{ steps.tests.outputs.report-artifact-id }}
-          path: downloaded-reports
-          merge-multiple: true
+          coverage: ${{ (inputs.scenario == 'reports' || inputs.scenario == 'failing-tests') && 'github' || '' }}
       - name: Assert - Reports and project preparation
+        id: assert
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         env:
           DIRECTORY: ${{ steps.fixture.outputs.directory }}
           OUTCOME: ${{ steps.tests.outcome }}
-          SCENARIO: ${{ matrix.scenario }}
+          SCENARIO: ${{ inputs.scenario }}
           ARTIFACT_ID: ${{ steps.tests.outputs.report-artifact-id }}
-          COVERAGE: ${{ matrix.coverage }}
+          COVERAGE: ${{ (inputs.scenario == 'reports' || inputs.scenario == 'failing-tests') && 'github' || '' }}
         with:
           script: |-
             const assert = require('node:assert/strict');
@@ -105,9 +90,9 @@ jobs:
               return;
             }
             assert.match(process.env.ARTIFACT_ID, /^\d+$/);
-            const files = await (await glob.create('downloaded-reports/**/*', {matchDirectories: false})).glob();
-            assert.deepEqual(files.map(file => path.basename(file)).sort(), process.env.COVERAGE === 'github' ? ['cobertura.xml', 'junit.xml'] : ['junit.xml']);
-            for (const file of files) assert.equal(fs.readFileSync(file, 'utf8'), fs.readFileSync(path.join(directory, path.basename(file)), 'utf8'));
+            const {createHash} = require('node:crypto');
+            const reportNames = process.env.COVERAGE === 'github' ? ['cobertura.xml', 'junit.xml'] : ['junit.xml'];
+            core.setOutput('expected-reports', Object.fromEntries(reportNames.map(name => [name, createHash('sha256').update(fs.readFileSync(path.join(directory, name))).digest('hex')])));
             const junit = fs.readFileSync(path.join(directory, 'junit.xml'), 'utf8');
             assert.match(junit, /<testcase\b/);
             assert.equal(junit.includes('<failure'), scenario === 'failing-tests');
@@ -121,7 +106,16 @@ jobs:
               assert.equal(fs.readFileSync(path.join(directory, 'prepared.txt'), 'utf8'), 'ready');
             }
 
+  verify-reports:
+    needs: test
+    if: needs.test.outputs.report-artifact-id != ''
+    uses: $/.github/workflows/__assert-report-artifact.yml
+    with:
+      artifact-id: ${{ needs.test.outputs.report-artifact-id }}
+      expected-reports: ${{ needs.test.outputs.expected-reports }}
+
   individual-comment:
+    if: inputs.scenario == 'reports'
     runs-on: ubuntu-latest
     permissions:
       contents: read
