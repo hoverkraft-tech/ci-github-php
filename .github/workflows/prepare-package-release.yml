@@ -48,7 +48,7 @@ jobs:
             }
       - id: plan
         if: "!startsWith(github.ref, 'refs/tags/')"
-        uses: hoverkraft-tech/ci-github-publish/actions/release/plan@b942fb00f3115ca70f98f45f2289cc9838eb9312 # 3.0.0
+        uses: hoverkraft-tech/ci-github-publish/actions/release/plan@4193622a365c0ab0bcbd6645895fd2c3126b72ba # 3.0.2
         with:
           config-overrides: ${{ inputs.release-config }}
           target-ref: ${{ github.sha }}
@@ -70,7 +70,7 @@ jobs:
             core.setOutput('tag', tag);
       - id: verify
         if: steps.identity.outputs.has-changes == 'true'
-        uses: hoverkraft-tech/ci-github-publish/actions/release/verify@b942fb00f3115ca70f98f45f2289cc9838eb9312 # 3.0.0
+        uses: hoverkraft-tech/ci-github-publish/actions/release/verify@4193622a365c0ab0bcbd6645895fd2c3126b72ba # 3.0.2
         with:
           tags: ${{ format('["{0}"]', steps.identity.outputs.tag) }}
           require-tags: ${{ startsWith(github.ref, 'refs/tags/') }}

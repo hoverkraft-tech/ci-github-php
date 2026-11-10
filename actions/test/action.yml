@@ -42,7 +42,7 @@ runs:
   using: composite
   steps:
     - id: directory
-      uses: hoverkraft-tech/ci-github-common/actions/working-directory@5fbb531db839a26ebcc35c4946be279f945f7633 # 1.0.0
+      uses: hoverkraft-tech/ci-github-common/actions/working-directory@66882b24f9f13e45a6541896a5a7c638cb91c94c # 4.0.0
       with:
         working-directory: ${{ inputs.working-directory }}
     - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
@@ -65,7 +65,7 @@ runs:
     - name: Report test results
       id: reports
       if: ${{ !cancelled() && steps.directory.outcome == 'success' }}
-      uses: hoverkraft-tech/ci-github-common/actions/quality/parse-ci-reports@90211d735aa0289702ddbd7eb95b218020ccadad # 2.0.2
+      uses: hoverkraft-tech/ci-github-common/actions/quality/parse-ci-reports@66882b24f9f13e45a6541896a5a7c638cb91c94c # 4.0.0
       with:
         working-directory: ${{ steps.directory.outputs.absolute-path }}
         report-paths: ${{ inputs.coverage == 'github' && 'auto:test,auto:coverage' || 'auto:test' }}
@@ -73,7 +73,7 @@ runs:
         output-format: annotations,summary,markdown
     - name: Publish individual report comment
       if: ${{ !cancelled() && inputs.comment == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && (steps.reports.outputs.test-markdown != '' || steps.reports.outputs.coverage-markdown != '') }}
-      uses: hoverkraft-tech/ci-github-common/actions/create-or-update-comment@90211d735aa0289702ddbd7eb95b218020ccadad # 2.0.2
+      uses: hoverkraft-tech/ci-github-common/actions/create-or-update-comment@66882b24f9f13e45a6541896a5a7c638cb91c94c # 4.0.0
       with:
         title: PHP test results
         body: |
@@ -135,7 +135,7 @@ runs:
           core.setOutput('files', files.sort().join(','));
     - name: Upload coverage
       if: "!cancelled() && steps.coverage-reports.outcome == 'success'"
-      uses: hoverkraft-tech/ci-github-common/actions/quality/codecov@5fbb531db839a26ebcc35c4946be279f945f7633 # 1.0.0
+      uses: hoverkraft-tech/ci-github-common/actions/quality/codecov@66882b24f9f13e45a6541896a5a7c638cb91c94c # 4.0.0
       with:
         working-directory: ${{ steps.directory.outputs.absolute-path }}
         files: ${{ steps.coverage-reports.outputs.files }}
