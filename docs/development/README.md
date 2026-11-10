@@ -12,7 +12,8 @@ public CI and documentation workflows. The Composer fixture covers automatic and
 lockfile and lockfile-free setup, installation hooks, PHPUnit reports, and PHPStan.
 Test-action cases cover Composer-owned report generation, coverage publication,
 preparation, custom commands, and failure propagation. Dedicated lint and test
-workflows retrieve native artifacts from successful and failed commands, check
+workflows retrieve native artifacts in dependent jobs after successful or intentionally
+failed commands finish. They compare report names and content hashes, check
 that hidden project paths work without uploading unrelated files, and verify
 empty artifact outputs when no reports are produced. Read-only jobs exercise
 the default comment policy; separate jobs verify opt-in comments with collapsed

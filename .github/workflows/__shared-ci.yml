@@ -37,12 +37,33 @@ jobs:
     permissions:
       contents: read
   test-action-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario:
+          [
+            reports,
+            publication-disabled,
+            preparation,
+            composer-command,
+            failing-command,
+            failing-tests,
+            no-reports,
+          ]
     uses: $/.github/workflows/__test-action-test.yml
+    with:
+      scenario: ${{ matrix.scenario }}
     permissions:
       contents: read
       pull-requests: write
   test-action-lint:
+    strategy:
+      fail-fast: false
+      matrix:
+        scenario: [success, failure, no-reports]
     uses: $/.github/workflows/__test-action-lint.yml
+    with:
+      scenario: ${{ matrix.scenario }}
     permissions:
       contents: read
       pull-requests: write

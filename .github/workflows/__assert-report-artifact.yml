@@ -1,0 +1,40 @@
+name: Internal - Assert native report artifact
+on:
+  workflow_call:
+    inputs:
+      artifact-id:
+        description: Native report artifact produced by the scenario.
+        required: true
+        type: string
+      expected-reports:
+        description: JSON mapping of expected report filenames to their SHA-256 hashes.
+        required: true
+        type: string
+permissions: {}
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      # Read artifacts after the producer finishes, as downstream consumers do.
+      - name: Assert - Download the native report artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ inputs.artifact-id }}
+          path: downloaded-reports
+          merge-multiple: true
+      - name: Assert - Only expected reports are uploaded, with unchanged contents
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          EXPECTED_REPORTS: ${{ inputs.expected-reports }}
+        with:
+          script: |
+            const assert = require('node:assert/strict');
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const {createHash} = require('node:crypto');
+            const expected = JSON.parse(process.env.EXPECTED_REPORTS);
+            const files = await (await glob.create('downloaded-reports/**/*', {matchDirectories: false})).glob();
+            assert.deepEqual(files.map(file => path.basename(file)).sort(), Object.keys(expected).sort());
+            for (const file of files) {
+              assert.equal(createHash('sha256').update(fs.readFileSync(file)).digest('hex'), expected[path.basename(file)]);
+            }
