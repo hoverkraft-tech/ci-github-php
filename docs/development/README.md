@@ -2,7 +2,11 @@
 
 Actions are standalone. Prefer `actions/github-script` and its supplied `core`,
 `exec`, `io`, and `glob` helpers. Composer metadata validation needs no dependency
-installation. Release planning and creation use `ci-github-publish`; the release
+installation. The standalone version resolver uses Composer's constraint parser and
+PHP.net release metadata; its Dockerfile installs only its own locked dependencies.
+The action builds and runs that image with the runner's UID/GID and a read-only
+checkout mount. `github-script` publishes the resolver's JSON as action outputs.
+Release planning and creation use `ci-github-publish`; the release
 workflow validates Composer metadata and tag identity before publication.
 
 ## Validation
@@ -26,7 +30,7 @@ actual preparation and publication scripts: event restrictions, no-change status
 prepared tag handoff, retry context and Composer metadata. Shared planner and
 verifier tests in `ci-github-publish` cover force and tag recovery. They never create a tag or release.
 
-With PHP, Composer and Git installed, run:
+With PHP 8.4.1 or newer, Composer and Git installed, run:
 
 ```sh
 make setup
@@ -34,7 +38,7 @@ make test
 ```
 
 `setup` installs dependencies for tracked Composer fixtures with scripts and plugins
-disabled. `test` runs fixture lint and PHPUnit. `deps-update` refreshes their
+disabled. `test` runs fixture lint and the Composer projects that declare a test script. `deps-update` refreshes their
 lockfiles, with `deps-update-interactive` for selecting updates; `deps-audit` reports dependency advisories without changing files.
 `make ci` installs, audits, tests and lints; it does not automatically fix files.
 
@@ -52,12 +56,19 @@ through `ci-github-publish/.github/workflows/release-actions.yml`. Update metada
 then regenerate using that tool. The CI and release workflows include their authored guides in leading comments;
 regeneration writes them to the corresponding `.github/workflows/*.md` files.
 
-Dependabot updates GitHub Actions, Composer fixtures, containers, and development
-containers. Each ecosystem explicitly uses the `build` commit prefix with a
+Dependabot updates GitHub Actions, action Composer manifests and lockfiles, Composer
+fixtures, containers, and development containers. Recursive action directory patterns
+cover standalone action dependencies without a per-action list. Each ecosystem explicitly uses the `build` commit prefix with a
 dependency scope. The root `.commitlintrc.json` configures the same rules for
 contributors and Dependabot. Conventional types and required subjects remain
 blocking; casing and line lengths produce warnings. Local linting, commit checks
 and the semantic pull request workflow read that repository configuration.
+
+The resolver has unit coverage for Composer constraints, patch bounds, exclusions,
+prereleases and discovery failures. Its integration workflow checks default setup,
+explicit overrides, workspace containment, unchanged runner PHP, and the same
+resolver in local Docker builds. Public CI exercises automatic
+matrix discovery against the nested Composer fixture.
 
 Renovate follows the common Hoverkraft maintenance workflow for
 Docker action references, the root `.php-version`, and the Composer bootstrap

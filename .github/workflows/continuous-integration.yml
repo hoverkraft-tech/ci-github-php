@@ -10,8 +10,6 @@
 #     permissions:
 #       contents: read
 #       id-token: write
-#     with:
-#       php-versions: '["8.2", "8.3", "8.4", "8.5"]'
 # ```
 #
 # Define `lint:ci` and `test:ci` in `composer.json`. These are explicit project commands;
@@ -21,15 +19,22 @@
 #
 # Use `runs-on` for a JSON array of Linux runner labels, for example
 # `runs-on: '["self-hosted", "linux"]'`. Every job uses those labels.
+# Docker must be available for the PHP version discovery action.
 # Set `checks: false` to skip lint, tests, dependency review and distribution checks.
 #
 # ### Runtime and dependencies
 #
-# With no `php-versions` input, setup reads the project's `.php-version`, then the
-# repository's `.php-version`, then delegates platform detection to `setup-php`.
-# An explicit version matrix tests all listed versions. The last entry runs lint
-# and package checks; only that version publishes coverage. An empty entry
-# in the matrix uses the default version selection.
+# With no `php-versions` input, CI reads `composer.json`'s `require.php` and
+# discovers released stable versions from PHP.net using Composer's constraint parser.
+# Discovery runs in its own container without changing the runner's PHP installation.
+# It tests the newest compatible patch of every matching minor, including end-of-life
+# versions still allowed by the project. Prereleases are excluded. Missing or invalid
+# constraints and release-catalog failures stop discovery instead of choosing an arbitrary runtime.
+# The highest discovered version runs lint and package checks and publishes coverage.
+# Set `php-versions` explicitly to override the matrix, for example `'["8.2", "8.5"]'`.
+# The last explicit entry is primary; an empty entry delegates to the setup action,
+# which honors `.php-version` and Composer platform overrides before automatic discovery.
+# See [PHP version selection](../../actions/get-php-versions/README.md#local-docker-builds) for local Docker builds.
 #
 # Composer projects with or without a committed lockfile are supported. Each
 # project is installed independently. By default, setup installs the root manifest
@@ -101,7 +106,7 @@
 # reports:
 #   needs: [lint, test]
 #   if: always()
-#   uses: hoverkraft-tech/ci-github-common/.github/workflows/ci-reports.yml@66882b24f9f13e45a6541896a5a7c638cb91c94c # 4.0.0
+#   uses: hoverkraft-tech/ci-github-common/.github/workflows/ci-reports.yml@d07ee49b460ae2f3815804b5153fe918092aa321 # 4.2.0
 #   permissions:
 #     contents: read
 #     pull-requests: write
@@ -210,7 +215,7 @@ on:
         type: string
         default: .
       php-versions:
-        description: Optional JSON array of PHP versions to test. The last entry runs lint and package checks and publishes coverage. An empty entry uses .php-version or setup-php platform detection. Empty input runs that default once.
+        description: Optional JSON array overriding Composer-based PHP discovery. Empty discovers the newest stable compatible patch per minor. The last version runs lint/package checks and publishes coverage. An empty entry uses the setup action default.
         type: string
         default: ""
       extensions:
@@ -262,7 +267,8 @@ permissions: {}
 jobs:
   configuration:
     runs-on: ${{ fromJSON(inputs.runs-on) }}
-    permissions: {}
+    permissions:
+      contents: read
     outputs:
       versions: ${{ steps.config.outputs.versions }}
       primary-version: ${{ steps.config.outputs.primary-version }}
@@ -271,6 +277,15 @@ jobs:
       package-enabled: ${{ steps.package-config.outputs.enabled }}
       package-tests: ${{ steps.package-config.outputs.tests }}
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: inputs.checks && inputs.php-versions == ''
+        with:
+          persist-credentials: false
+      - id: versions
+        if: inputs.checks && inputs.php-versions == ''
+        uses: $/actions/get-php-versions
+        with:
+          working-directory: ${{ inputs.working-directory }}
       - id: package-config
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
@@ -297,7 +312,7 @@ jobs:
       - id: config
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          VERSIONS: ${{ inputs.php-versions }}
+          VERSIONS: ${{ inputs.php-versions || steps.versions.outputs.php-versions }}
           LINT: ${{ inputs.lint }}
           TEST: ${{ inputs.test }}
         with:

@@ -9,7 +9,7 @@ inputs:
     description: Project directory relative to the checkout.
     default: .
   php-version:
-    description: Explicit PHP version. Empty reads the project or repository .php-version, then setup-php platform detection.
+    description: Explicit PHP version. Empty honors .php-version and Composer platform overrides, then discovers the highest stable release matching composer.json require.php.
     default: ""
   extensions:
     description: PHP extensions forwarded to shivammathur/setup-php.
@@ -37,25 +37,39 @@ runs:
   using: composite
   steps:
     - id: directory
-      uses: hoverkraft-tech/ci-github-common/actions/working-directory@66882b24f9f13e45a6541896a5a7c638cb91c94c # 4.0.0
+      uses: hoverkraft-tech/ci-github-common/actions/working-directory@d07ee49b460ae2f3815804b5153fe918092aa321 # 4.2.0
       with:
         working-directory: ${{ inputs.working-directory }}
     - id: version-file
       uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
         DIRECTORY: ${{ steps.directory.outputs.absolute-path }}
+        PHP_VERSION: ${{ inputs.php-version }}
       with:
         script: |-
           const fs = require('node:fs');
           const path = require('node:path');
           const local = path.join(process.env.DIRECTORY, '.php-version');
-          core.setOutput('path', fs.existsSync(local) ? local : path.join(process.env.GITHUB_WORKSPACE, '.php-version'));
+          const versionFile = fs.existsSync(local) ? local : path.join(process.env.GITHUB_WORKSPACE, '.php-version');
+          core.setOutput('path', fs.existsSync(versionFile) ? versionFile : '');
+          if (process.env.PHP_VERSION || fs.existsSync(versionFile)) return;
+          const read = name => {
+            const file = path.join(process.env.DIRECTORY, name);
+            return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+          };
+          const platform = read('composer.lock')['platform-overrides']?.php || read('composer.json').config?.platform?.php;
+          core.setOutput('discover', !fs.existsSync(versionFile) && !platform);
+    - id: versions
+      if: inputs.php-version == '' && steps.version-file.outputs.discover == 'true'
+      uses: $/actions/get-php-versions
+      with:
+        working-directory: ${{ steps.directory.outputs.workspace-relative-path }}
     - id: php
       uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
       env:
         COMPOSER_PROJECT_DIR: ${{ steps.directory.outputs.absolute-path }}
       with:
-        php-version: ${{ inputs.php-version }}
+        php-version: ${{ inputs.php-version || steps.versions.outputs.php-version }}
         php-version-file: ${{ steps.version-file.outputs.path }}
         tools: composer:2.11.0
         extensions: ${{ inputs.extensions }}

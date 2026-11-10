@@ -30,6 +30,7 @@ optional configuration.
 
 ### Environment setup
 
+- [Get PHP versions](actions/get-php-versions/README.md): discover stable versions allowed by Composer.
 - [Setup PHP](actions/setup-php/README.md): install PHP and Composer dependencies.
 
 ## Reusable workflows and guides

@@ -4,7 +4,7 @@ on:
 permissions: {}
 jobs:
   linter:
-    uses: hoverkraft-tech/ci-github-common/.github/workflows/linter.yml@66882b24f9f13e45a6541896a5a7c638cb91c94c # 4.0.0
+    uses: hoverkraft-tech/ci-github-common/.github/workflows/linter.yml@d07ee49b460ae2f3815804b5153fe918092aa321 # 4.2.0
     permissions:
       contents: read
       statuses: write
@@ -21,6 +21,11 @@ jobs:
         VALIDATE_PHP_PSALM=false
   test-workflow-continuous-integration:
     uses: $/.github/workflows/__test-workflow-continuous-integration.yml
+    permissions:
+      contents: read
+      id-token: write
+  test-action-get-php-versions:
+    uses: $/.github/workflows/__test-action-get-php-versions.yml
     permissions:
       contents: read
       id-token: write

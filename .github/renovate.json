@@ -38,7 +38,7 @@
     },
     {
       "customType": "regex",
-      "managerFilePatterns": ["/^actions/setup-php/action\\.yml$/"],
+      "managerFilePatterns": ["/^actions/.*?/action\\.yml$/"],
       "matchStrings": ["tools: composer:(?<currentValue>\\d+\\.\\d+\\.\\d+)"],
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "composer/composer"
