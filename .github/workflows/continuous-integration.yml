@@ -19,14 +19,14 @@
 #
 # Use `runs-on` for a JSON array of Linux runner labels, for example
 # `runs-on: '["self-hosted", "linux"]'`. Every job uses those labels.
-# Docker must be available for the PHP version discovery action.
+# PHP version discovery uses GitHub's native Node.js runtime with bundled dependencies.
 # Set `checks: false` to skip lint, tests, dependency review and distribution checks.
 #
 # ### Runtime and dependencies
 #
 # With no `php-versions` input, CI reads `composer.json`'s `require.php` and
-# discovers released stable versions from PHP.net using Composer's constraint parser.
-# Discovery runs in its own container without changing the runner's PHP installation.
+# discovers released stable versions from PHP.net using Composer constraint semantics.
+# Discovery leaves the runner's PHP installation unchanged.
 # It tests the newest compatible patch of every matching minor, including end-of-life
 # versions still allowed by the project. Prereleases are excluded. Missing or invalid
 # constraints and release-catalog failures stop discovery instead of choosing an arbitrary runtime.

@@ -34,14 +34,14 @@ they execute even when dependency installation scripts are disabled. An empty
 
 Use `runs-on` for a JSON array of Linux runner labels, for example
 `runs-on: '["self-hosted", "linux"]'`. Every job uses those labels.
-Docker must be available for the PHP version discovery action.
+PHP version discovery uses GitHub's native Node.js runtime with bundled dependencies.
 Set `checks: false` to skip lint, tests, dependency review and distribution checks.
 
 ### Runtime and dependencies
 
 With no `php-versions` input, CI reads `composer.json`'s `require.php` and
-discovers released stable versions from PHP.net using Composer's constraint parser.
-Discovery runs in its own container without changing the runner's PHP installation.
+discovers released stable versions from PHP.net using Composer constraint semantics.
+Discovery leaves the runner's PHP installation unchanged.
 It tests the newest compatible patch of every matching minor, including end-of-life
 versions still allowed by the project. Prereleases are excluded. Missing or invalid
 constraints and release-catalog failures stop discovery instead of choosing an arbitrary runtime.
@@ -233,7 +233,7 @@ on:
 permissions: {}
 jobs:
   continuous-integration:
-    uses: hoverkraft-tech/ci-github-php/.github/workflows/continuous-integration.yml@7b1303edc25e97da2a297dd285a54cf4b6ae76a1 # 1.1.2
+    uses: hoverkraft-tech/ci-github-php/.github/workflows/continuous-integration.yml@b81aa7b46f6b7a18ff1d9582c918cc1cc8296b98 # 2.0.0
     permissions:
       contents: read
       id-token: write

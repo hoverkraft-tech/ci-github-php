@@ -1,0 +1,3 @@
+name: Maintained JavaScript sources
+paths-ignore:
+  - actions/**/dist/**

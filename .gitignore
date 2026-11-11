@@ -22,6 +22,8 @@ cobertura.xml
 
 # Build artifacts
 dist/
+!actions/**/dist/
+node_modules/
 build/
 coverage/
 

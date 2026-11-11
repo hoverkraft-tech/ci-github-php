@@ -1,6 +1,7 @@
-.PHONY: help setup deps-install deps-update deps-update-interactive deps-audit test ci lint lint-fix
+.PHONY: help setup deps-install deps-update deps-update-interactive deps-audit build test ci lint lint-fix
 
 COMPOSER_DIRECTORIES := $(patsubst %/composer.json,%,$(shell git ls-files '**/composer.json'))
+NPM_DIRECTORIES := $(patsubst %/package.json,%,$(shell git ls-files 'actions/**/package.json' ':!:actions/**/dist/**'))
 
 help: ## Display help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
@@ -11,11 +12,13 @@ deps-install: ## Install action and fixture dependencies without hooks or plugin
 	@set -e; for directory in $(COMPOSER_DIRECTORIES); do \
 		composer --working-dir="$$directory" --no-interaction --no-plugins install --no-scripts --prefer-dist; \
 	done
+	@set -e; for directory in $(NPM_DIRECTORIES); do npm --prefix="$$directory" ci --ignore-scripts; done
 
 deps-update: ## Update action and fixture dependencies and lockfiles
 	@set -e; for directory in $(COMPOSER_DIRECTORIES); do \
 		composer --working-dir="$$directory" --no-interaction --no-plugins update --no-scripts --prefer-dist; \
 	done
+	@set -e; for directory in $(NPM_DIRECTORIES); do npm --prefix="$$directory" update --ignore-scripts; done
 
 deps-update-interactive: ## Interactively select fixture dependency updates
 	@set -e; for directory in $(COMPOSER_DIRECTORIES); do \
@@ -26,19 +29,25 @@ deps-audit: ## Audit action and fixture dependencies
 	@set -e; for directory in $(COMPOSER_DIRECTORIES); do \
 		composer --working-dir="$$directory" --no-interaction --no-plugins audit; \
 	done
+	@set -e; for directory in $(NPM_DIRECTORIES); do npm --prefix="$$directory" audit; done
 
-test: ## Run fixture lint and Composer project tests
+build: ## Rebuild standalone JavaScript action distributions
+	@set -e; for directory in $(NPM_DIRECTORIES); do npm --prefix="$$directory" run build; done
+
+test: ## Run fixture lint and standalone action tests
 	composer --working-dir=tests/php-project lint:ci
 	@set -e; for directory in $(COMPOSER_DIRECTORIES); do \
 		if php -r 'exit(isset(json_decode(file_get_contents($$argv[1]), true)["scripts"]["test"]) ? 0 : 1);' "$$directory/composer.json"; then \
 			composer --working-dir="$$directory" test; \
 		fi; \
 	done
+	@set -e; for directory in $(NPM_DIRECTORIES); do npm --prefix="$$directory" test; done
 
 ci: ## Install, audit, test and lint without rewriting source files
 	$(MAKE) deps-install
 	$(MAKE) deps-audit
 	$(MAKE) test
+	@set -e; for directory in $(NPM_DIRECTORIES); do npm --prefix="$$directory" run check:dist; done
 	$(MAKE) lint
 
 lint: ## Execute linting

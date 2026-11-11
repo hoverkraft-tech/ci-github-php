@@ -5,7 +5,11 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!!.devcontainer/devcontainer-lock.json"]
+    "includes": [
+      "**",
+      "!!.devcontainer/devcontainer-lock.json",
+      "!actions/**/dist"
+    ]
   },
   "formatter": {
     "indentStyle": "space"
