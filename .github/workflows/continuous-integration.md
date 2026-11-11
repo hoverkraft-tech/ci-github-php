@@ -3,7 +3,7 @@
 # GitHub Reusable Workflow: Continuous integration
 
 <div align="center">
-  <img src="https://opengraph.githubassets.com/a34afe6048695ba84de01344b4411e2ff7f3d84ff89656758648d934c793f392/hoverkraft-tech/ci-github-php" width="60px" align="center" alt="Continuous integration" />
+  <img src="https://opengraph.githubassets.com/3d2511885985a0290215e9a9dd16896d3d1b2f7768fb4052866074e0b169a61d/hoverkraft-tech/ci-github-php" width="60px" align="center" alt="Continuous integration" />
 </div>
 
 ---
@@ -233,7 +233,7 @@ on:
 permissions: {}
 jobs:
   continuous-integration:
-    uses: hoverkraft-tech/ci-github-php/.github/workflows/continuous-integration.yml@cd42dba540a7f3ff20ebeeb67e7710d65c6ec7c5 # feat/composer-php-version-discovery
+    uses: hoverkraft-tech/ci-github-php/.github/workflows/continuous-integration.yml@7b1303edc25e97da2a297dd285a54cf4b6ae76a1 # 1.1.2
     permissions:
       contents: read
       id-token: write
