@@ -3,7 +3,7 @@
 # GitHub Reusable Workflow: Build PHP documentation
 
 <div align="center">
-  <img src="https://opengraph.githubassets.com/a34afe6048695ba84de01344b4411e2ff7f3d84ff89656758648d934c793f392/hoverkraft-tech/ci-github-php" width="60px" align="center" alt="Build PHP documentation" />
+  <img src="https://opengraph.githubassets.com/3d2511885985a0290215e9a9dd16896d3d1b2f7768fb4052866074e0b169a61d/hoverkraft-tech/ci-github-php" width="60px" align="center" alt="Build PHP documentation" />
 </div>
 
 ---
