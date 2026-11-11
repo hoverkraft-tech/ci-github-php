@@ -26,7 +26,7 @@ comments with collapsed details.
 ## Usage
 
 ```yaml
-- uses: hoverkraft-tech/ci-github-php/actions/lint@7b1303edc25e97da2a297dd285a54cf4b6ae76a1 # 1.1.2
+- uses: hoverkraft-tech/ci-github-php/actions/lint@b81aa7b46f6b7a18ff1d9582c918cc1cc8296b98 # 2.0.0
   with:
     # Composer project directory. Run setup-php first to install its dependencies.
     # Default: `.`

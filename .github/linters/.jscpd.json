@@ -2,6 +2,7 @@
   "threshold": 5,
   "ignore": [
     "**/vendor/**",
+    "actions/**/dist/**",
     "**/actions/**/README.md",
     "**/.github/workflows/*.md"
   ]

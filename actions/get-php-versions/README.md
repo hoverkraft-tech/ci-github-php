@@ -13,7 +13,7 @@
 
 ## Overview
 
-Discover stable PHP releases matching composer.json require.php using Composer constraints. Runs in Docker on Linux without changing the runner's PHP installation.
+Discover stable PHP releases matching composer.json require.php using Composer constraints. Runs on the native Node.js runtime without installing PHP or project dependencies.
 
 ### PHP version selection
 
@@ -33,17 +33,16 @@ checks and publishes coverage. A new stable minor is included when the constrain
 already allows it. Explicitly restricted ranges require a deliberate Composer change
 before CI adds another minor. End-of-life versions remain tested when still allowed.
 
-Discovery uses PHP.net release metadata and Composer's constraint parser. It handles
+Discovery uses PHP.net release metadata and composer-semver's Composer constraint parser. It handles
 patch bounds and disjoint ranges without approximating them as npm SemVer.
 Prereleases are excluded. A missing or invalid `require.php`, an unavailable release
 catalog, or a constraint with no matching stable release causes an error. Dependency
 installation still validates the project and tooling against the selected runtime.
 
-The discovery action builds and runs its Docker image on Linux runners with Docker,
-using the runner's UID/GID and a read-only checkout mount.
-CI and local builds use the same container runtime and locked dependencies. Discovery
-does not change PHP on the runner. The setup action then installs the selected PHP
-version when the job needs it.
+The discovery action uses GitHub's native Node.js runtime with bundled dependencies.
+It needs no PHP, Composer, Docker or dependency installation on the runner. Discovery
+leaves the runner's PHP installation unchanged. Local Docker builds use the same
+bundled resolver. The setup action installs the selected PHP version when needed.
 
 ### Overrides
 
@@ -87,7 +86,7 @@ Automatic selection requires workflow files with one consistent commit pin for
 `ci-github-php`. Missing or conflicting pins stop the build before fetching the
 resolver. Explicit `PHP_VERSION` overrides in the consumer Makefiles skip discovery.
 
-Docker caches the resolver image's dependencies. Each invocation consults the release
+Docker caches the resolver image and its bundled dependencies. Each invocation consults the release
 catalog, so newly available compatible releases need no Makefile version edit. The
 resolver prints the highest matching patch by default. Pass `/project` as its only
 argument to print the complete JSON result instead.
@@ -102,7 +101,7 @@ development image name for subsequent commands.
 ## Usage
 
 ```yaml
-- uses: hoverkraft-tech/ci-github-php/actions/get-php-versions@7b1303edc25e97da2a297dd285a54cf4b6ae76a1 # 1.1.2
+- uses: hoverkraft-tech/ci-github-php/actions/get-php-versions@b81aa7b46f6b7a18ff1d9582c918cc1cc8296b98 # 2.0.0
   with:
     # Project directory relative to the checkout.
     # Default: `.`

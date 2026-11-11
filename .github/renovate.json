@@ -43,5 +43,8 @@
       "datasourceTemplate": "github-releases",
       "depNameTemplate": "composer/composer"
     }
+  ],
+  "gitIgnoredAuthors": [
+    "128996893+hoverkraft-bot[bot]@users.noreply.github.com"
   ]
 }

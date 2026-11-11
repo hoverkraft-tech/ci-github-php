@@ -110,6 +110,24 @@ updates effective for both CI and local tooling. Missing or conflicting pins fai
 before fetching the resolver. This couples automatic local selection to a checkout
 with consistent workflow pins; an explicit PHP version bypasses discovery.
 
+### Native Node.js resolver follow-up
+
+The 2026-11-11 follow-up proposes replacing the action's PHP bridge with GitHub's
+native Node.js runtime. Keep the same inputs, outputs, constraint semantics and
+path containment. Bundle the standalone action's dependencies; local Docker builds
+use that exact bundle without installing Composer or npm dependencies at runtime.
+Use the shared Node.js CI and action-distribution workflows for tests, coverage,
+bundle verification and dependency update automation.
+
+The PHP implementation remains the accepted implementation until a stable
+`composer-semver` release contains the corrections proposed in
+[composer-semver-ts #1](https://github.com/shyim/composer-semver-ts/pull/1).
+The published 0.1.1 parser differed from Composer 3.6.0 on eight of 49 tested
+constraints, including wildcard exclusions, hyphen bounds and malformed syntax.
+The draft migration keeps those contract checks blocking and adds no local parser
+patches. Update the npm manifest, lockfile and bundle to the fixed stable release,
+then pass the full contract and integration checks before accepting this follow-up.
+
 ## Alternatives
 
 Copying npm's version-update step would introduce source churn that Composer does

@@ -2,10 +2,10 @@
 
 Actions are standalone. Prefer `actions/github-script` and its supplied `core`,
 `exec`, `io`, and `glob` helpers. Composer metadata validation needs no dependency
-installation. The standalone version resolver uses Composer's constraint parser and
-PHP.net release metadata; its Dockerfile installs only its own locked dependencies.
-The action builds and runs that image with the runner's UID/GID and a read-only
-checkout mount. `github-script` publishes the resolver's JSON as action outputs.
+installation. The standalone version resolver uses `composer-semver` and PHP.net
+release metadata. Its native Node.js entry point bundles its locked dependencies
+and uses `@actions/core` for inputs, outputs and failures. The local Docker image
+contains the same bundle and defaults to an unprivileged user.
 Release planning and creation use `ci-github-publish`; the release
 workflow validates Composer metadata and tag identity before publication.
 
@@ -30,17 +30,25 @@ actual preparation and publication scripts: event restrictions, no-change status
 prepared tag handoff, retry context and Composer metadata. Shared planner and
 verifier tests in `ci-github-publish` cover force and tag recovery. They never create a tag or release.
 
-With PHP 8.4.1 or newer, Composer and Git installed, run:
+With PHP 8.4.1 or newer, Composer, Node.js 24 or newer, npm and Git installed, run:
 
 ```sh
 make setup
 make test
 ```
 
-`setup` installs dependencies for tracked Composer fixtures with scripts and plugins
-disabled. `test` runs fixture lint and the Composer projects that declare a test script. `deps-update` refreshes their
+`setup` installs dependencies for tracked Composer and npm projects with installation hooks
+disabled. `test` runs fixture lint and project tests. `build` rebuilds the committed
+JavaScript action bundles. `deps-update` refreshes dependency
 lockfiles, with `deps-update-interactive` for selecting updates; `deps-audit` reports dependency advisories without changing files.
-`make ci` installs, audits, tests and lints; it does not automatically fix files.
+`make ci` installs, audits, tests, verifies distributions and lints. Distribution
+verification rebuilds the bundle and fails if the committed output differs.
+
+JavaScript action tests follow the `parse-ci-reports` pattern: a standalone package,
+tests beside source, shared Node.js CI, JUnit and LCOV artifacts, and one combined
+CI report comment. The shared distribution workflow discovers action packages and
+tests isolated bundles without adjacent dependencies. Dependency update PRs rebuild
+bundles through the shared read-only builder and trusted writer workflows.
 
 Run `make lint` for the repository's Docker lint checks. PHP analysis runs in the
 Composer integration workflow, using its declared runtime and tools; the generic
@@ -56,7 +64,7 @@ through `ci-github-publish/.github/workflows/release-actions.yml`. Update metada
 then regenerate using that tool. The CI and release workflows include their authored guides in leading comments;
 regeneration writes them to the corresponding `.github/workflows/*.md` files.
 
-Dependabot updates GitHub Actions, action Composer manifests and lockfiles, Composer
+Dependabot updates GitHub Actions, action npm and Composer manifests and lockfiles, Composer
 fixtures, containers, and development containers. Recursive action directory patterns
 cover standalone action dependencies without a per-action list. Each ecosystem explicitly uses the `build` commit prefix with a
 dependency scope. The root `.commitlintrc.json` configures the same rules for

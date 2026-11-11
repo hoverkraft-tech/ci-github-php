@@ -16,17 +16,16 @@
 # already allows it. Explicitly restricted ranges require a deliberate Composer change
 # before CI adds another minor. End-of-life versions remain tested when still allowed.
 #
-# Discovery uses PHP.net release metadata and Composer's constraint parser. It handles
+# Discovery uses PHP.net release metadata and composer-semver's Composer constraint parser. It handles
 # patch bounds and disjoint ranges without approximating them as npm SemVer.
 # Prereleases are excluded. A missing or invalid `require.php`, an unavailable release
 # catalog, or a constraint with no matching stable release causes an error. Dependency
 # installation still validates the project and tooling against the selected runtime.
 #
-# The discovery action builds and runs its Docker image on Linux runners with Docker,
-# using the runner's UID/GID and a read-only checkout mount.
-# CI and local builds use the same container runtime and locked dependencies. Discovery
-# does not change PHP on the runner. The setup action then installs the selected PHP
-# version when the job needs it.
+# The discovery action uses GitHub's native Node.js runtime with bundled dependencies.
+# It needs no PHP, Composer, Docker or dependency installation on the runner. Discovery
+# leaves the runner's PHP installation unchanged. Local Docker builds use the same
+# bundled resolver. The setup action installs the selected PHP version when needed.
 #
 # ### Overrides
 #
@@ -70,7 +69,7 @@
 # `ci-github-php`. Missing or conflicting pins stop the build before fetching the
 # resolver. Explicit `PHP_VERSION` overrides in the consumer Makefiles skip discovery.
 #
-# Docker caches the resolver image's dependencies. Each invocation consults the release
+# Docker caches the resolver image and its bundled dependencies. Each invocation consults the release
 # catalog, so newly available compatible releases need no Makefile version edit. The
 # resolver prints the highest matching patch by default. Pass `/project` as its only
 # argument to print the complete JSON result instead.
@@ -79,7 +78,7 @@
 # When no override is supplied, use the resolver for the build and a stable local
 # development image name for subsequent commands.
 name: Get PHP versions
-description: Discover stable PHP releases matching composer.json require.php using Composer constraints. Runs in Docker on Linux without changing the runner's PHP installation.
+description: Discover stable PHP releases matching composer.json require.php using Composer constraints. Runs on the native Node.js runtime without installing PHP or project dependencies.
 author: hoverkraft
 branding:
   icon: list
@@ -91,32 +90,8 @@ inputs:
 outputs:
   php-versions:
     description: JSON array of matching releases, with the newest compatible patch per minor, sorted ascending. Includes end-of-life versions allowed by require.php; excludes prereleases.
-    value: ${{ steps.versions.outputs.php-versions }}
   php-version:
     description: Highest stable PHP release matching require.php.
-    value: ${{ steps.versions.outputs.php-version }}
-# FIXME: Replace this PHP bridge with the native Node.js action once a stable
-# composer-semver release includes https://github.com/shyim/composer-semver-ts/pull/1
-# and passes the Composer constraint compatibility tests in the migration PR.
 runs:
-  using: composite
-  steps:
-    - id: versions
-      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-      env:
-        ACTION_PATH: ${{ github.action_path }}
-        WORKING_DIRECTORY: ${{ inputs.working-directory }}
-      with:
-        script: |
-          const image = await exec.getExecOutput('docker', ['build', '--quiet', process.env.ACTION_PATH]);
-          const {stdout} = await exec.getExecOutput('docker', [
-            'run', '--rm',
-            '--user', `${process.getuid()}:${process.getgid()}`,
-            '--volume', `${process.env.GITHUB_WORKSPACE}:/project:ro`,
-            '--workdir', '/project',
-            '--env', 'GITHUB_WORKSPACE=/project',
-            image.stdout.trim(), process.env.WORKING_DIRECTORY,
-          ]);
-          const versions = JSON.parse(stdout);
-          core.setOutput('php-versions', versions['php-versions']);
-          core.setOutput('php-version', versions['php-version']);
+  using: node24
+  main: dist/index.js

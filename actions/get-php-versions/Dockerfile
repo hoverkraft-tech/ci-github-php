@@ -1,12 +1,10 @@
-FROM composer:2.11.0@sha256:278dfc7bd35169965d03f87194816f43bf4e6b6ea61707c2114e52ad12fe24ce
+FROM node:24-bookworm-slim@sha256:01d566e8d94d8c619591d78652babfccd3c6992a3dffa9ed5ab39e11cf6c70e9
 
-COPY composer.json composer.lock /opt/php-versions/
-RUN composer --working-dir=/opt/php-versions install --no-dev --no-interaction --no-plugins --no-scripts --prefer-dist --no-progress
-COPY src/ /opt/php-versions/src/
+COPY dist/ /opt/php-versions/dist/
 
-USER 65534:65534
+USER 1000:1000
 
-HEALTHCHECK --interval=5m --timeout=10s --retries=3 CMD ["php", "--version"]
+HEALTHCHECK --interval=5m --timeout=10s --retries=3 CMD ["node", "--version"]
 
-ENTRYPOINT ["php", "/opt/php-versions/src/cli.php"]
+ENTRYPOINT ["node", "/opt/php-versions/dist/index.js"]
 CMD ["/project", "--latest"]

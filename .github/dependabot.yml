@@ -56,6 +56,24 @@ updates:
           - "*"
     cooldown:
       default-days: 7
+  - package-ecosystem: npm
+    commit-message:
+      prefix: build
+      include: scope
+    open-pull-requests-limit: 20
+    versioning-strategy: increase
+    directories:
+      - /actions/**/*
+    schedule:
+      interval: weekly
+      day: friday
+      time: "04:00"
+    groups:
+      npm-dependencies:
+        patterns:
+          - "*"
+    cooldown:
+      default-days: 7
   - package-ecosystem: devcontainers
     commit-message:
       prefix: build
