@@ -71,7 +71,7 @@ runs:
       with:
         php-version: ${{ inputs.php-version || steps.versions.outputs.php-version }}
         php-version-file: ${{ steps.version-file.outputs.path }}
-        tools: composer:2.11.0
+        tools: composer:2.11.1
         extensions: ${{ inputs.extensions }}
         coverage: ${{ inputs.coverage }}
     - id: configuration
