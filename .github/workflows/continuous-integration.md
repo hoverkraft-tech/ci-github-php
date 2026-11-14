@@ -121,7 +121,7 @@ disabled and add one final job using the common reporting workflow:
 reports:
   needs: [lint, test]
   if: always()
-  uses: hoverkraft-tech/ci-github-common/.github/workflows/ci-reports.yml@d07ee49b460ae2f3815804b5153fe918092aa321 # 4.2.0
+  uses: hoverkraft-tech/ci-github-common/.github/workflows/ci-reports.yml@f44e1bcc350b6bfe9e4a86a27b1d5e032e58f292 # 4.2.1
   permissions:
     contents: read
     pull-requests: write
