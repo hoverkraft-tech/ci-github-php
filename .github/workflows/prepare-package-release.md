@@ -3,7 +3,7 @@
 # GitHub Reusable Workflow: Prepare Composer Package Release
 
 <div align="center">
-  <img src="https://opengraph.githubassets.com/a34afe6048695ba84de01344b4411e2ff7f3d84ff89656758648d934c793f392/hoverkraft-tech/ci-github-php" width="60px" align="center" alt="Prepare Composer Package Release" />
+  <img src="https://opengraph.githubassets.com/5a7c702c44d747bd5bc39e4250e7c3a85b252d06b7377fe8b308a033fd5f68c8/hoverkraft-tech/ci-github-php" width="60px" align="center" alt="Prepare Composer Package Release" />
 </div>
 
 ---
@@ -36,7 +36,7 @@ on:
 permissions: {}
 jobs:
   prepare-package-release:
-    uses: hoverkraft-tech/ci-github-php/.github/workflows/prepare-package-release.yml@7b1303edc25e97da2a297dd285a54cf4b6ae76a1 # 1.1.2
+    uses: hoverkraft-tech/ci-github-php/.github/workflows/prepare-package-release.yml@b81aa7b46f6b7a18ff1d9582c918cc1cc8296b98 # 2.0.0
     permissions:
       contents: read
       pull-requests: read
