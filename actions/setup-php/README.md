@@ -21,7 +21,7 @@ Set up PHP and Composer, cache downloads and install project dependencies with o
 ## Usage
 
 ```yaml
-- uses: hoverkraft-tech/ci-github-php/actions/setup-php@b81aa7b46f6b7a18ff1d9582c918cc1cc8296b98 # 2.0.0
+- uses: hoverkraft-tech/ci-github-php/actions/setup-php@6d0964888074223db9c53b756d004846f3a1569e # 2.0.1
   with:
     # Project directory relative to the checkout.
     # Default: `.`

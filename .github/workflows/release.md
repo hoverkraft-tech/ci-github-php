@@ -150,7 +150,7 @@ on:
 permissions: {}
 jobs:
   release:
-    uses: hoverkraft-tech/ci-github-php/.github/workflows/release.yml@b81aa7b46f6b7a18ff1d9582c918cc1cc8296b98 # 2.0.0
+    uses: hoverkraft-tech/ci-github-php/.github/workflows/release.yml@6d0964888074223db9c53b756d004846f3a1569e # 2.0.1
     permissions:
       contents: write
       pull-requests: read
