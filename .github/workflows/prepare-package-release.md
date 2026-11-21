@@ -36,7 +36,7 @@ on:
 permissions: {}
 jobs:
   prepare-package-release:
-    uses: hoverkraft-tech/ci-github-php/.github/workflows/prepare-package-release.yml@6d0964888074223db9c53b756d004846f3a1569e # 2.0.1
+    uses: hoverkraft-tech/ci-github-php/.github/workflows/prepare-package-release.yml@066aee0d473f892c897c35511393ebc54394a4f1 # 2.0.2
     permissions:
       contents: read
       pull-requests: read
