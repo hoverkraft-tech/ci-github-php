@@ -3,7 +3,7 @@
 # ![Icon](data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGNsYXNzPSJmZWF0aGVyIGZlYXRoZXItbGlzdCIgY29sb3I9ImJsdWUiPjxsaW5lIHgxPSI4IiB5MT0iNiIgeDI9IjIxIiB5Mj0iNiI+PC9saW5lPjxsaW5lIHgxPSI4IiB5MT0iMTIiIHgyPSIyMSIgeTI9IjEyIj48L2xpbmU+PGxpbmUgeDE9IjgiIHkxPSIxOCIgeDI9IjIxIiB5Mj0iMTgiPjwvbGluZT48bGluZSB4MT0iMyIgeTE9IjYiIHgyPSIzLjAxIiB5Mj0iNiI+PC9saW5lPjxsaW5lIHgxPSIzIiB5MT0iMTIiIHgyPSIzLjAxIiB5Mj0iMTIiPjwvbGluZT48bGluZSB4MT0iMyIgeTE9IjE4IiB4Mj0iMy4wMSIgeTI9IjE4Ij48L2xpbmU+PC9zdmc+) GitHub Action: Get PHP versions
 
 <div align="center">
-  <img src="https://opengraph.githubassets.com/3d2511885985a0290215e9a9dd16896d3d1b2f7768fb4052866074e0b169a61d/hoverkraft-tech/ci-github-php" width="60px" align="center" alt="Get PHP versions" />
+  <img src="https://opengraph.githubassets.com/5a7c702c44d747bd5bc39e4250e7c3a85b252d06b7377fe8b308a033fd5f68c8/hoverkraft-tech/ci-github-php" width="60px" align="center" alt="Get PHP versions" />
 </div>
 
 ---
@@ -102,7 +102,7 @@ development image name for subsequent commands.
 ## Usage
 
 ```yaml
-- uses: hoverkraft-tech/ci-github-php/actions/get-php-versions@7b1303edc25e97da2a297dd285a54cf4b6ae76a1 # 1.1.2
+- uses: hoverkraft-tech/ci-github-php/actions/get-php-versions@066aee0d473f892c897c35511393ebc54394a4f1 # 2.0.2
   with:
     # Project directory relative to the checkout.
     # Default: `.`

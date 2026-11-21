@@ -233,7 +233,7 @@ on:
 permissions: {}
 jobs:
   continuous-integration:
-    uses: hoverkraft-tech/ci-github-php/.github/workflows/continuous-integration.yml@6d0964888074223db9c53b756d004846f3a1569e # 2.0.1
+    uses: hoverkraft-tech/ci-github-php/.github/workflows/continuous-integration.yml@066aee0d473f892c897c35511393ebc54394a4f1 # 2.0.2
     permissions:
       contents: read
       id-token: write
