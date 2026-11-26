@@ -3,7 +3,7 @@
 # ![Icon](data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGNsYXNzPSJmZWF0aGVyIGZlYXRoZXItcGFja2FnZSIgY29sb3I9ImJsdWUiPjxsaW5lIHgxPSIxNi41IiB5MT0iOS40IiB4Mj0iNy41IiB5Mj0iNC4yMSI+PC9saW5lPjxwYXRoIGQ9Ik0yMSAxNlY4YTIgMiAwIDAgMC0xLTEuNzNsLTctNGEyIDIgMCAwIDAtMiAwbC03IDRBMiAyIDAgMCAwIDMgOHY4YTIgMiAwIDAgMCAxIDEuNzNsNyA0YTIgMiAwIDAgMCAyIDBsNy00QTIgMiAwIDAgMCAyMSAxNnoiPjwvcGF0aD48cG9seWxpbmUgcG9pbnRzPSIzLjI3IDYuOTYgMTIgMTIuMDEgMjAuNzMgNi45NiI+PC9wb2x5bGluZT48bGluZSB4MT0iMTIiIHkxPSIyMi4wOCIgeDI9IjEyIiB5Mj0iMTIiPjwvbGluZT48L3N2Zz4=) GitHub Action: Test PHP
 
 <div align="center">
-  <img src="https://opengraph.githubassets.com/5a7c702c44d747bd5bc39e4250e7c3a85b252d06b7377fe8b308a033fd5f68c8/hoverkraft-tech/ci-github-php" width="60px" align="center" alt="Test PHP" />
+  <img src="https://opengraph.githubassets.com/05ea9a9fdb45886f2706abb0ce737c6560eaedd105114eab302008c6b5d4a269/hoverkraft-tech/ci-github-php" width="60px" align="center" alt="Test PHP" />
 </div>
 
 ---
@@ -20,13 +20,22 @@ including after command failures. Only parsed report files are uploaded.
 Keep `comment: false` and call the common `ci-reports` workflow after producer
 jobs for consolidated comments with collapsed details.
 
+Native `coverage: github-code-quality` prepares Cobertura artifacts for the common
+[CI reports workflow](https://github.com/hoverkraft-tech/ci-github-common/blob/main/.github/workflows/ci-reports.md)
+and its opt-in publication workflow. Set `report-group` to the outer calling job
+and list every expected component in the collector. The default label is the
+repository-relative working directory, or `root`. Multiple reports need explicit
+stable labels. Reports must measure the PR head commit, not the PR merge commit.
+Keep merge-result validation separately when required. No upload permission is
+needed in this test action; only the publication job needs `code-quality: write`.
+
 <!-- overview:end -->
 <!-- usage:start -->
 
 ## Usage
 
 ```yaml
-- uses: hoverkraft-tech/ci-github-php/actions/test@066aee0d473f892c897c35511393ebc54394a4f1 # 2.0.2
+- uses: hoverkraft-tech/ci-github-php/actions/test@63aed766521b3b3bff31c4d36f59b2916e90a361 # 2.0.3
   with:
     # Composer project directory. Run setup-php first to install its dependencies.
     # Default: `.`
@@ -47,9 +56,18 @@ jobs for consolidated comments with collapsed details.
     # Default: `test:ci`
     command: test:ci
 
-    # Coverage destination: `github` for report parsing, `codecov` for OIDC upload, or empty to disable coverage publication. Coverage files must be produced by the test command.
+    # Native GitHub coverage reports as a JSON array of file, language and optional label.
+    # Empty uses cobertura.xml; multiple reports require explicit unique labels.
+    # Every file must be Cobertura XML produced by the test command. Paths are relative
+    # to working-directory. Example: [{"file":"coverage.xml","language":"PHP","label":"backend"}].
+    coverage-reports: ""
+
+    # Coverage destination: `github` for summaries, `github-code-quality` for native coverage artifacts, `codecov` for OIDC upload, or empty to disable coverage publication. Coverage files must be produced by the test command.
     # Default: `github`
     coverage: github
+
+    # Outer calling job ID for consolidated reports. Defaults to the current job ID.
+    report-group: ""
 
     # Publish an individual test and coverage PR comment. Requires pull-requests write permission. Fork comments are disabled. Leave false for consolidated reporting; annotations, summaries and artifacts remain enabled.
     # Default: `false`
@@ -61,22 +79,27 @@ jobs for consolidated comments with collapsed details.
 
 ## Inputs
 
-| **Input**               | **Description**                                                                                                                                                                                                       | **Required** | **Default** |
-| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ----------- |
-| **`working-directory`** | Composer project directory. Run setup-php first to install its dependencies.                                                                                                                                          | **false**    | `.`         |
-| **`command`**           | Composer script to execute unchanged, normally `test:ci` in composer.json.                                                                                                                                            | **false**    | `test:ci`   |
-|                         | The project defines its test tool, preparation and report generation. Examples:                                                                                                                                       |              |             |
-|                         |                                                                                                                                                                                                                       |              |             |
-|                         | - PHPUnit: `phpunit --configuration phpunit.xml --log-junit=junit.xml --coverage-cobertura=cobertura.xml`                                                                                                             |              |             |
-|                         | - Pest: `pest --ci --log-junit=junit.xml --coverage-cobertura=cobertura.xml`                                                                                                                                          |              |             |
-|                         | - Codeception: `codecept run --xml=junit.xml --coverage-xml=clover.xml`;                                                                                                                                              |              |             |
-|                         | enable coverage in codeception.yml and select `coverage: codecov` for its Clover XML.                                                                                                                                 |              |             |
-|                         |                                                                                                                                                                                                                       |              |             |
-|                         | For Codecov, PHPUnit and Pest can use `--coverage-clover=clover.xml`.                                                                                                                                                 |              |             |
-|                         | Omit coverage arguments when collection is not needed. The coverage input controls publication only.                                                                                                                  |              |             |
-|                         | See the [CI guide](../../.github/workflows/continuous-integration.md).                                                                                                                                                |              |             |
-| **`coverage`**          | Coverage destination: `github` for report parsing, `codecov` for OIDC upload, or empty to disable coverage publication. Coverage files must be produced by the test command.                                          | **false**    | `github`    |
-| **`comment`**           | Publish an individual test and coverage PR comment. Requires pull-requests write permission. Fork comments are disabled. Leave false for consolidated reporting; annotations, summaries and artifacts remain enabled. | **false**    | `false`     |
+| **Input**               | **Description**                                                                                                                                                                                                              | **Required** | **Default** |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ----------- |
+| **`working-directory`** | Composer project directory. Run setup-php first to install its dependencies.                                                                                                                                                 | **false**    | `.`         |
+| **`command`**           | Composer script to execute unchanged, normally `test:ci` in composer.json.                                                                                                                                                   | **false**    | `test:ci`   |
+|                         | The project defines its test tool, preparation and report generation. Examples:                                                                                                                                              |              |             |
+|                         |                                                                                                                                                                                                                              |              |             |
+|                         | - PHPUnit: `phpunit --configuration phpunit.xml --log-junit=junit.xml --coverage-cobertura=cobertura.xml`                                                                                                                    |              |             |
+|                         | - Pest: `pest --ci --log-junit=junit.xml --coverage-cobertura=cobertura.xml`                                                                                                                                                 |              |             |
+|                         | - Codeception: `codecept run --xml=junit.xml --coverage-xml=clover.xml`;                                                                                                                                                     |              |             |
+|                         | enable coverage in codeception.yml and select `coverage: codecov` for its Clover XML.                                                                                                                                        |              |             |
+|                         |                                                                                                                                                                                                                              |              |             |
+|                         | For Codecov, PHPUnit and Pest can use `--coverage-clover=clover.xml`.                                                                                                                                                        |              |             |
+|                         | Omit coverage arguments when collection is not needed. The coverage input controls publication only.                                                                                                                         |              |             |
+|                         | See the [CI guide](../../.github/workflows/continuous-integration.md).                                                                                                                                                       |              |             |
+| **`coverage-reports`**  | Native GitHub coverage reports as a JSON array of file, language and optional label.                                                                                                                                         | **false**    | -           |
+|                         | Empty uses cobertura.xml; multiple reports require explicit unique labels.                                                                                                                                                   |              |             |
+|                         | Every file must be Cobertura XML produced by the test command. Paths are relative                                                                                                                                            |              |             |
+|                         | to working-directory. Example: [{"file":"coverage.xml","language":"PHP","label":"backend"}].                                                                                                                                 |              |             |
+| **`coverage`**          | Coverage destination: `github` for summaries, `github-code-quality` for native coverage artifacts, `codecov` for OIDC upload, or empty to disable coverage publication. Coverage files must be produced by the test command. | **false**    | `github`    |
+| **`report-group`**      | Outer calling job ID for consolidated reports. Defaults to the current job ID.                                                                                                                                               | **false**    | -           |
+| **`comment`**           | Publish an individual test and coverage PR comment. Requires pull-requests write permission. Fork comments are disabled. Leave false for consolidated reporting; annotations, summaries and artifacts remain enabled.        | **false**    | `false`     |
 
 <!-- inputs:end -->
 <!-- secrets:start -->
@@ -85,9 +108,10 @@ jobs for consolidated comments with collapsed details.
 
 ## Outputs
 
-| **Output**               | **Description**                                                                                                   |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------- |
-| **`report-artifact-id`** | Native report artifact ID, empty when no supported reports were parsed. Coverage is included only in GitHub mode. |
+| **Output**                        | **Description**                                                                                                                      |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **`native-coverage-artifact-id`** | Cobertura artifact for native GitHub publication, empty unless github-code-quality is selected.                                      |
+| **`report-artifact-id`**          | Native report artifact ID, empty when no supported reports were parsed. Coverage is included for `github` and `github-code-quality`. |
 
 <!-- outputs:end -->
 <!-- badges:start -->

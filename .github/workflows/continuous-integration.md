@@ -3,7 +3,7 @@
 # GitHub Reusable Workflow: Continuous integration
 
 <div align="center">
-  <img src="https://opengraph.githubassets.com/5a7c702c44d747bd5bc39e4250e7c3a85b252d06b7377fe8b308a033fd5f68c8/hoverkraft-tech/ci-github-php" width="60px" align="center" alt="Continuous integration" />
+  <img src="https://opengraph.githubassets.com/05ea9a9fdb45886f2706abb0ce737c6560eaedd105114eab302008c6b5d4a269/hoverkraft-tech/ci-github-php" width="60px" align="center" alt="Continuous integration" />
 </div>
 
 ---
@@ -214,6 +214,17 @@ the files GitHub will distribute, without adding a package publication step.
 Package checks run on the primary PHP version. The source test matrix remains
 responsible for compatibility across every supported PHP version. Release callers should depend on successful validation with `needs`.
 
+## Native GitHub coverage
+
+Select `test: '{"coverage":"github-code-quality","report-group":"backend"}'`.
+This tests the PR head commit; existing destinations keep their usual merge-ref
+checkout. Keep a separate merge-result test invocation when your policy requires it.
+Only the primary runtime publishes coverage. Optionally set test.coverage-reports
+to an array of {file, language, label} for multiple Cobertura components.
+Call the common ci-reports workflow with every expected job/label, then its
+publish-coverage workflow. Only publication needs code-quality: write.
+See [native coverage collection](https://github.com/hoverkraft-tech/ci-github-common/blob/main/.github/workflows/ci-reports.md#native-github-coverage).
+
 ### Permissions
 
 - **`contents`**: `read`
@@ -233,7 +244,7 @@ on:
 permissions: {}
 jobs:
   continuous-integration:
-    uses: hoverkraft-tech/ci-github-php/.github/workflows/continuous-integration.yml@066aee0d473f892c897c35511393ebc54394a4f1 # 2.0.2
+    uses: hoverkraft-tech/ci-github-php/.github/workflows/continuous-integration.yml@63aed766521b3b3bff31c4d36f59b2916e90a361 # 2.0.3
     permissions:
       contents: read
       id-token: write
@@ -275,7 +286,7 @@ jobs:
       # Run the Composer `test:ci` script unchanged, or provide another script name.
       # Pass "false", "null" or an empty string to disable tests.
       # A JSON object groups test options: `command` (default `test:ci`),
-      # `coverage` (`github`, `codecov` or empty), and `cache` (one directory relative to working-directory).
+      # `coverage` (`github`, `github-code-quality`, `codecov` or empty), `coverage-reports` (array), `report-group` (outer job ID), and `cache` (one directory relative to working-directory).
       # Configure report/coverage generation in the Composer script itself.
       # Coverage is published on the last PHP version only; the command controls collection on every version. Codecov requires id-token: write.
       # Example: `{"coverage":"codecov","cache":".cache"}`.
@@ -319,7 +330,7 @@ jobs:
 | **`test`**                 | Run the Composer `test:ci` script unchanged, or provide another script name.                                                                                                                                                               | **false**    | **string**  | `true`                                           |
 |                            | Pass "false", "null" or an empty string to disable tests.                                                                                                                                                                                  |              |             |                                                  |
 |                            | A JSON object groups test options: `command` (default `test:ci`),                                                                                                                                                                          |              |             |                                                  |
-|                            | `coverage` (`github`, `codecov` or empty), and `cache` (one directory relative to working-directory).                                                                                                                                      |              |             |                                                  |
+|                            | `coverage` (`github`, `github-code-quality`, `codecov` or empty), `coverage-reports` (array), `report-group` (outer job ID), and `cache` (one directory relative to working-directory).                                                    |              |             |                                                  |
 |                            | Configure report/coverage generation in the Composer script itself.                                                                                                                                                                        |              |             |                                                  |
 |                            | Coverage is published on the last PHP version only; the command controls collection on every version. Codecov requires id-token: write.                                                                                                    |              |             |                                                  |
 |                            | Example: `{"coverage":"codecov","cache":".cache"}`.                                                                                                                                                                                        |              |             |                                                  |
