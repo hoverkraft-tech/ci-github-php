@@ -310,7 +310,7 @@ jobs:
               coverage:version === versions.at(-1) && test.coverage ? (test['coverage-reports'].length ? test['coverage-reports'] : [{file:'cobertura.xml',language:'PHP'}]) : []});
             core.setOutput('report-producers',producers);
       - id: report-plan
-        uses: hoverkraft-tech/ci-github-common/actions/quality/record-ci-reports@5ea25078a15fe361993382872c03a63fd667c11a # unified reports (PR #683, unreleased)
+        uses: hoverkraft-tech/ci-github-common/actions/quality/record-ci-reports@11c842902d003cc4ee2fa1d42f6d80bc6828461a # unified reports (PR #683, unreleased)
         with:
           operation: plan
           producers: ${{ steps.config.outputs.report-producers }}

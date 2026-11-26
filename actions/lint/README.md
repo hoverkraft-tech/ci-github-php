@@ -2,23 +2,18 @@
 
 # ![Icon](data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiIGNsYXNzPSJmZWF0aGVyIGZlYXRoZXItcGFja2FnZSIgY29sb3I9ImJsdWUiPjxsaW5lIHgxPSIxNi41IiB5MT0iOS40IiB4Mj0iNy41IiB5Mj0iNC4yMSI+PC9saW5lPjxwYXRoIGQ9Ik0yMSAxNlY4YTIgMiAwIDAgMC0xLTEuNzNsLTctNGEyIDIgMCAwIDAtMiAwbC03IDRBMiAyIDAgMCAwIDMgOHY4YTIgMiAwIDAgMCAxIDEuNzNsNyA0YTIgMiAwIDAgMCAyIDBsNy00QTIgMiAwIDAgMCAyMSAxNnoiPjwvcGF0aD48cG9seWxpbmUgcG9pbnRzPSIzLjI3IDYuOTYgMTIgMTIuMDEgMjAuNzMgNi45NiI+PC9wb2x5bGluZT48bGluZSB4MT0iMTIiIHkxPSIyMi4wOCIgeDI9IjEyIiB5Mj0iMTIiPjwvbGluZT48L3N2Zz4=) GitHub Action: Lint PHP
 
-<div align="center">
-  <img src="https://opengraph.githubassets.com/5a7c702c44d747bd5bc39e4250e7c3a85b252d06b7377fe8b308a033fd5f68c8/hoverkraft-tech/ci-github-php" width="60px" align="center" alt="Lint PHP" />
-</div>
-
----
-
 <!-- header:end -->
 <!-- overview:start -->
 
 ## Overview
 
-Run a project-defined Composer lint script and report results.
+Run project lint commands and retain native reports for consolidated CI feedback.
+The common ci-reports workflow owns comments and external coverage publication.
+Forward report-plan from standalone jobs; reusable workflows do this automatically.
+Required reports remain required after command failures. This action keeps local
+diagnostics and never grants publication permissions to project code.
 
-Native lint reports are retained for seven days, including after command
-failures. Only parsed report files are uploaded. Keep `comment: false` and
-call the common `ci-reports` workflow after producer jobs for consolidated
-comments with collapsed details.
+Generate supported lint reports such as SARIF, ESLint JSON or Checkstyle XML.
 
 <!-- overview:end -->
 <!-- usage:start -->
@@ -26,7 +21,7 @@ comments with collapsed details.
 ## Usage
 
 ```yaml
-- uses: hoverkraft-tech/ci-github-php/actions/lint@066aee0d473f892c897c35511393ebc54394a4f1 # 2.0.2
+- uses: hoverkraft-tech/ci-github-php/actions/lint@f8d7617370279021ecf35ff6fe4e3a72598bc34b # feat/native-github-coverage
   with:
     # Composer project directory. Run setup-php first to install its dependencies.
     # Default: `.`
@@ -48,9 +43,8 @@ comments with collapsed details.
     # Default: `lint:ci`
     command: lint:ci
 
-    # Publish an individual lint PR comment. Requires pull-requests write permission. Fork comments are disabled. Leave false for consolidated reporting; annotations, summaries and artifacts remain enabled.
-    # Default: `false`
-    comment: "false"
+    # Expected producer metadata supplied by reusable workflows. Leave empty for standalone use.
+    report-plan: ""
 ```
 
 <!-- usage:end -->
@@ -58,22 +52,22 @@ comments with collapsed details.
 
 ## Inputs
 
-| **Input**               | **Description**                                                                                                                                                                                          | **Required** | **Default** |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ----------- |
-| **`working-directory`** | Composer project directory. Run setup-php first to install its dependencies.                                                                                                                             | **false**    | `.`         |
-| **`command`**           | Composer script to execute, normally `lint:ci` in composer.json.                                                                                                                                         | **false**    | `lint:ci`   |
-|                         | Define the tools and their configuration in that script. Examples:                                                                                                                                       |              |             |
-|                         |                                                                                                                                                                                                          |              |             |
-|                         | - PHPStan: `phpstan analyse --error-format=checkstyle > phpstan-checkstyle.xml`                                                                                                                          |              |             |
-|                         | - Psalm: `psalm --output-format=checkstyle > psalm-checkstyle.xml`                                                                                                                                       |              |             |
-|                         | - PHP_CodeSniffer: `phpcs --report=checkstyle --report-file=phpcs-checkstyle.xml`                                                                                                                        |              |             |
-|                         | - PHP CS Fixer: `php-cs-fixer check --format=checkstyle > php-cs-fixer-checkstyle.xml`                                                                                                                   |              |             |
-|                         |                                                                                                                                                                                                          |              |             |
-|                         | Redirecting output preserves the tool's exit status. The action discovers                                                                                                                                |              |             |
-|                         | Checkstyle reports for annotations and summaries. Use paths relative to the project;                                                                                                                     |              |             |
-|                         | for separate tooling installations, prefix binaries with `tools/vendor/bin/`.                                                                                                                            |              |             |
-|                         | See the [CI guide](../../.github/workflows/continuous-integration.md).                                                                                                                                   |              |             |
-| **`comment`**           | Publish an individual lint PR comment. Requires pull-requests write permission. Fork comments are disabled. Leave false for consolidated reporting; annotations, summaries and artifacts remain enabled. | **false**    | `false`     |
+| **Input**               | **Description**                                                                            | **Required** | **Default** |
+| ----------------------- | ------------------------------------------------------------------------------------------ | ------------ | ----------- |
+| **`working-directory`** | Composer project directory. Run setup-php first to install its dependencies.               | **false**    | `.`         |
+| **`command`**           | Composer script to execute, normally `lint:ci` in composer.json.                           | **false**    | `lint:ci`   |
+|                         | Define the tools and their configuration in that script. Examples:                         |              |             |
+|                         |                                                                                            |              |             |
+|                         | - PHPStan: `phpstan analyse --error-format=checkstyle > phpstan-checkstyle.xml`            |              |             |
+|                         | - Psalm: `psalm --output-format=checkstyle > psalm-checkstyle.xml`                         |              |             |
+|                         | - PHP_CodeSniffer: `phpcs --report=checkstyle --report-file=phpcs-checkstyle.xml`          |              |             |
+|                         | - PHP CS Fixer: `php-cs-fixer check --format=checkstyle > php-cs-fixer-checkstyle.xml`     |              |             |
+|                         |                                                                                            |              |             |
+|                         | Redirecting output preserves the tool's exit status. The action discovers                  |              |             |
+|                         | Checkstyle reports for annotations and summaries. Use paths relative to the project;       |              |             |
+|                         | for separate tooling installations, prefix binaries with `tools/vendor/bin/`.              |              |             |
+|                         | See the [CI guide](../../.github/workflows/continuous-integration.md).                     |              |             |
+| **`report-plan`**       | Expected producer metadata supplied by reusable workflows. Leave empty for standalone use. | **false**    | -           |
 
 <!-- inputs:end -->
 <!-- secrets:start -->
@@ -82,9 +76,10 @@ comments with collapsed details.
 
 ## Outputs
 
-| **Output**               | **Description**                                                              |
-| ------------------------ | ---------------------------------------------------------------------------- |
-| **`report-artifact-id`** | Native lint report artifact ID, empty when no supported reports were parsed. |
+| **Output**               | **Description**                                                       |
+| ------------------------ | --------------------------------------------------------------------- |
+| **`report-artifact-id`** | Native report bundle, including available diagnostics after failures. |
+| **`report-plan`**        | Expected report metadata. Forward from standalone jobs.               |
 
 <!-- outputs:end -->
 <!-- badges:start -->

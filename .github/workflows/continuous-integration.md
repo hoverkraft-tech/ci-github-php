@@ -2,12 +2,6 @@
 
 # GitHub Reusable Workflow: Continuous integration
 
-<div align="center">
-  <img src="https://opengraph.githubassets.com/05ea9a9fdb45886f2706abb0ce737c6560eaedd105114eab302008c6b5d4a269/hoverkraft-tech/ci-github-php" width="60px" align="center" alt="Continuous integration" />
-</div>
-
----
-
 <!-- header:end -->
 <!-- overview:start -->
 
@@ -24,7 +18,6 @@ jobs:
     uses: hoverkraft-tech/ci-github-php/.github/workflows/continuous-integration.yml@<commit-sha>
     permissions:
       contents: read
-      id-token: write
 ```
 
 Define `lint:ci` and `test:ci` in `composer.json`. These are explicit project commands;
@@ -45,7 +38,7 @@ Discovery runs in its own container without changing the runner's PHP installati
 It tests the newest compatible patch of every matching minor, including end-of-life
 versions still allowed by the project. Prereleases are excluded. Missing or invalid
 constraints and release-catalog failures stop discovery instead of choosing an arbitrary runtime.
-The highest discovered version runs lint and package checks and publishes coverage.
+The highest discovered version runs lint and package checks and contributes coverage.
 Set `php-versions` explicitly to override the matrix, for example `'["8.2", "8.5"]'`.
 The last explicit entry is primary; an empty entry delegates to the setup action,
 which honors `.php-version` and Composer platform overrides before automatic discovery.
@@ -70,102 +63,49 @@ without installing the project, for example before isolated package checks.
 
 ### Reports and coverage
 
-The lint and test actions reuse `ci-github-common/actions/quality/parse-ci-reports` for
-GitHub annotations and job summaries. The test action runs your Composer script unchanged. The script selects its test tool,
-preparation, configuration and report formats. For PHPUnit, keep the everyday test
-command and add a CI script:
+Lint and test jobs retain native diagnostics in one artifact per execution.
+They post no PR comments and need no publication permissions. Configure native
+test reports (JUnit or TAP) and lint reports (for example Checkstyle or SARIF).
+Missing required reports fail even when the tool command exits successfully.
+Available reports are retained after failures.
 
-```json
-{
-  "scripts": {
-    "test": "phpunit --configuration tests/phpunit.xml",
-    "test:ci": "@test --log-junit=junit.xml --coverage-cobertura=cobertura.xml"
-  }
-}
-```
+Tests require Cobertura by default. The highest configured runtime contributes
+coverage; every runtime retains its test results. Set `test: '{"coverage":false}'`
+for tests that deliberately produce no Cobertura. The command still controls
+instrumentation. Custom `test.coverage-reports` describes Cobertura file paths,
+Linguist languages and stable component labels; it belongs beside the producer.
+Separate components stay separate. Merge shards in the framework first.
 
-The action sets `CI=true` and adds no test-runner arguments. JUnit reports are
-parsed even after the command fails. The same Composer command runs on every PHP
-version; only the last version publishes coverage. The `coverage` option controls
-publication, not collection. Set it to an empty string to skip coverage publication;
-omit coverage arguments from your script when collection is not needed.
-
-For Codecov, use `--coverage-clover=clover.xml` in the script and configure:
-
-```yaml
-with:
-  test: '{"coverage":"codecov"}'
-```
-
-Codecov requires `id-token: write` and repository access. The action discovers
-Clover reports, falling back to Cobertura. For GitHub coverage summaries, generate
-Cobertura. Add generated report files to `.gitignore`. Clean any retained report
-files in your project command if it reuses an existing workspace.
-
-The lint and test actions upload only parsed native reports, including after a
-failed command, and retain them for seven days. Their `report-artifact-id`
-output identifies the artifact; it is empty when no supported reports were
-found. Test artifacts include coverage only with `coverage: github`.
-Codecov upload remains separate. Console-only lint output creates no artifact;
-configure a supported file report such as PHPStan Checkstyle for consolidation.
-
-Individual comments are disabled by default, keeping producer jobs read-only.
-When calling an action directly, set `comment: true` and grant
-`pull-requests: write` to opt in. Human and bot actors follow the same rules;
-fork PRs keep summaries, annotations and artifacts without commenting.
-
-For custom producer jobs named `lint` and `test`, leave individual comments
-disabled and add one final job using the common reporting workflow:
+Call the common workflow once after producer workflows. It reads their complete
+report plans from `needs`, regardless of calling job names:
 
 ```yaml
 reports:
-  needs: [lint, test]
-  if: always()
-  uses: hoverkraft-tech/ci-github-common/.github/workflows/ci-reports.yml@d606f77fad305ef07dfde3db5270f5e324019c97 # 4.2.4
+  needs: [checks]
+  if: ${{ always() }}
+  uses: hoverkraft-tech/ci-github-common/.github/workflows/ci-reports.yml@<commit-sha>
   permissions:
     contents: read
     pull-requests: write
+    code-quality: write
+    id-token: write
   with:
     job-results: ${{ toJSON(needs) }}
+    coverage: github
 ```
 
-This updates one comment each for tests, coverage and lint, with details
-collapsed. Keep producer job IDs aligned with the shared reporter's contract;
-when wrapping producers in reusable workflows, use matching caller and inner
-job IDs. The full CI workflow uses inner `lint` and `test` jobs; use the
-individual actions when you need to compose them with this final reporter.
-Keep producer jobs as required checks: report publication does not replace them.
+Select `coverage: none` (default) for summaries, `github` for native GitHub
+coverage, or `codecov`. Both publishers consume validated Cobertura. Native
+GitHub coverage requires repository enablement and a default-branch baseline.
+The reporting workflow owns one CI comment and the `CI reports complete` check.
+Forks retain diagnostics without write operations. Partial reruns require
+rerunning all producers. Producer workflows test the PR head or push revision.
 
-Preparation belongs in the Composer script, with report arguments attached only
-to the test command:
-
-```json
-{
-  "scripts": {
-    "test:ci": [
-      "@test:load-fixtures",
-      "@test --log-junit=junit.xml --coverage-clover=clover.xml"
-    ]
-  }
-}
-```
-
-Pest and Codeception projects use the same contract; define their commands and
-report options in Composer. No test-runner selection is needed in the action.
-Use `command` for a script name other than `test:ci`. Group custom settings in one
-input, omitting fields that use defaults:
-
-```yaml
-with:
-  test: '{"coverage":"codecov","cache":".cache"}'
-```
-
-The test `cache` option can retain a directory of generated test fixtures or results. Do not
-cache `vendor`; Composer installation manages dependencies.
-
-Dependency review runs only on pull requests. PHP CodeQL analysis is not part of
-the workflow because PHP is not a supported CodeQL language. Run your PHP static
-analyzer through the lint script.
+Standalone action jobs forward their `report-plan` output. Custom outer matrices
+must forward a complete plan derived from their configuration; GitHub's last
+successful matrix output does not describe all executions. See the common
+[recording action](https://github.com/hoverkraft-tech/ci-github-common/tree/main/actions/quality/record-ci-reports)
+for the advanced contract. No collector-side coverage inventory is needed.
 
 ### Generated application files and documentation
 
@@ -214,21 +154,9 @@ the files GitHub will distribute, without adding a package publication step.
 Package checks run on the primary PHP version. The source test matrix remains
 responsible for compatibility across every supported PHP version. Release callers should depend on successful validation with `needs`.
 
-## Native GitHub coverage
-
-Select `test: '{"coverage":"github-code-quality","report-group":"backend"}'`.
-This tests the PR head commit; existing destinations keep their usual merge-ref
-checkout. Keep a separate merge-result test invocation when your policy requires it.
-Only the primary runtime publishes coverage. Optionally set test.coverage-reports
-to an array of {file, language, label} for multiple Cobertura components.
-Call the common ci-reports workflow with every expected job/label, then its
-publish-coverage workflow. Only publication needs code-quality: write.
-See [native coverage collection](https://github.com/hoverkraft-tech/ci-github-common/blob/main/.github/workflows/ci-reports.md#native-github-coverage).
-
 ### Permissions
 
 - **`contents`**: `read`
-- **`id-token`**: `write`
 
 <!-- overview:end -->
 <!-- usage:start -->
@@ -244,10 +172,9 @@ on:
 permissions: {}
 jobs:
   continuous-integration:
-    uses: hoverkraft-tech/ci-github-php/.github/workflows/continuous-integration.yml@63aed766521b3b3bff31c4d36f59b2916e90a361 # 2.0.3
+    uses: hoverkraft-tech/ci-github-php/.github/workflows/continuous-integration.yml@f8d7617370279021ecf35ff6fe4e3a72598bc34b # feat/native-github-coverage
     permissions:
       contents: read
-      id-token: write
     with:
       # JSON array of Linux runner labels. Applies to every job, including the configuration job.
       # Default: `["ubuntu-latest"]`
@@ -261,7 +188,7 @@ jobs:
       # Default: `.`
       working-directory: .
 
-      # Optional JSON array overriding Composer-based PHP discovery. Empty discovers the newest stable compatible patch per minor. The last version runs lint/package checks and publishes coverage. An empty entry uses the setup action default.
+      # Optional JSON array overriding Composer-based PHP discovery. Empty discovers the newest stable compatible patch per minor. The last version runs lint/package checks and contributes coverage. An empty entry uses the setup action default.
       php-versions: ""
 
       # PHP extensions forwarded to setup-php.
@@ -283,14 +210,7 @@ jobs:
       # Default: `true`
       lint: "true"
 
-      # Run the Composer `test:ci` script unchanged, or provide another script name.
-      # Pass "false", "null" or an empty string to disable tests.
-      # A JSON object groups test options: `command` (default `test:ci`),
-      # `coverage` (`github`, `github-code-quality`, `codecov` or empty), `coverage-reports` (array), `report-group` (outer job ID), and `cache` (one directory relative to working-directory).
-      # Configure report/coverage generation in the Composer script itself.
-      # Coverage is published on the last PHP version only; the command controls collection on every version. Codecov requires id-token: write.
-      # Example: `{"coverage":"codecov","cache":".cache"}`.
-      #
+      # true for defaults, a Composer script, or JSON options (command, coverage boolean, coverage-reports array, cache). false, null or empty disables tests. Only the primary runtime contributes coverage.
       # Default: `true`
       test: "true"
 
@@ -307,6 +227,9 @@ jobs:
       # Review dependency changes on pull requests.
       # Default: `true`
       dependency-review: true
+
+      # Expected producer metadata supplied by reusable workflows. Leave empty for standalone use.
+      report-plan: ""
 ```
 
 <!-- usage:end -->
@@ -316,36 +239,38 @@ jobs:
 
 ### Workflow Call Inputs
 
-| **Input**                  | **Description**                                                                                                                                                                                                                            | **Required** | **Type**    | **Default**                                      |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------ | ----------- | ------------------------------------------------ |
-| **`runs-on`**              | JSON array of Linux runner labels. Applies to every job, including the configuration job.                                                                                                                                                  | **false**    | **string**  | `["ubuntu-latest"]`                              |
-| **`checks`**               | Enable lint, tests, dependency review and optional distribution checks.                                                                                                                                                                    | **false**    | **boolean** | `true`                                           |
-| **`working-directory`**    | Composer project directory relative to the checkout.                                                                                                                                                                                       | **false**    | **string**  | `.`                                              |
-| **`php-versions`**         | Optional JSON array overriding Composer-based PHP discovery. Empty discovers the newest stable compatible patch per minor. The last version runs lint/package checks and publishes coverage. An empty entry uses the setup action default. | **false**    | **string**  | -                                                |
-| **`extensions`**           | PHP extensions forwarded to setup-php.                                                                                                                                                                                                     | **false**    | **string**  | `mbstring, dom, xml, xmlwriter, curl, zip, intl` |
-| **`composer-directories`** | Optional JSON array of Composer directories relative to working-directory. Empty installs the root project and tools/composer.json when present, without recursive discovery.                                                              | **false**    | **string**  | -                                                |
-| **`ignore-scripts`**       | Disable Composer installation scripts. Explicit project commands still run.                                                                                                                                                                | **false**    | **boolean** | `true`                                           |
-| **`ignore-plugins`**       | Disable Composer plugins during installation. When false, Composer allow-plugins configuration still applies.                                                                                                                              | **false**    | **boolean** | `true`                                           |
-| **`lint`**                 | Composer lint script name or a JSON object with `command` (default `lint:ci`). Pass "false", "null" or an empty string to disable.                                                                                                         | **false**    | **string**  | `true`                                           |
-| **`test`**                 | Run the Composer `test:ci` script unchanged, or provide another script name.                                                                                                                                                               | **false**    | **string**  | `true`                                           |
-|                            | Pass "false", "null" or an empty string to disable tests.                                                                                                                                                                                  |              |             |                                                  |
-|                            | A JSON object groups test options: `command` (default `test:ci`),                                                                                                                                                                          |              |             |                                                  |
-|                            | `coverage` (`github`, `github-code-quality`, `codecov` or empty), `coverage-reports` (array), `report-group` (outer job ID), and `cache` (one directory relative to working-directory).                                                    |              |             |                                                  |
-|                            | Configure report/coverage generation in the Composer script itself.                                                                                                                                                                        |              |             |                                                  |
-|                            | Coverage is published on the last PHP version only; the command controls collection on every version. Codecov requires id-token: write.                                                                                                    |              |             |                                                  |
-|                            | Example: `{"coverage":"codecov","cache":".cache"}`.                                                                                                                                                                                        |              |             |                                                  |
-| **`package`**              | Validate a public Composer source distribution from the Git repository root.                                                                                                                                                               | **false**    | **string**  | `false`                                          |
-|                            | Pass "false" (the default) to disable, "true" for archive and autoload checks,                                                                                                                                                             |              |             |                                                  |
-|                            | or a JSON object with `tests` for additional commands in an isolated Composer consumer.                                                                                                                                                    |              |             |                                                  |
-|                            | Quote booleans because this input has type string. Example: `{"tests":"my-cli --help"}`.                                                                                                                                                   |              |             |                                                  |
-|                            | vendor/bin is on PATH; PACKAGE_NAME, PACKAGE_INSTALL_PATH and PACKAGE_ARCHIVE_PATH identify the package.                                                                                                                                   |              |             |                                                  |
-|                            | Unknown options and non-string tests are rejected before distribution checks.                                                                                                                                                              |              |             |                                                  |
-| **`dependency-review`**    | Review dependency changes on pull requests.                                                                                                                                                                                                | **false**    | **boolean** | `true`                                           |
+| **Input**                  | **Description**                                                                                                                                                                                                                              | **Required** | **Type**    | **Default**                                      |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------ | ----------- | ------------------------------------------------ |
+| **`runs-on`**              | JSON array of Linux runner labels. Applies to every job, including the configuration job.                                                                                                                                                    | **false**    | **string**  | `["ubuntu-latest"]`                              |
+| **`checks`**               | Enable lint, tests, dependency review and optional distribution checks.                                                                                                                                                                      | **false**    | **boolean** | `true`                                           |
+| **`working-directory`**    | Composer project directory relative to the checkout.                                                                                                                                                                                         | **false**    | **string**  | `.`                                              |
+| **`php-versions`**         | Optional JSON array overriding Composer-based PHP discovery. Empty discovers the newest stable compatible patch per minor. The last version runs lint/package checks and contributes coverage. An empty entry uses the setup action default. | **false**    | **string**  | -                                                |
+| **`extensions`**           | PHP extensions forwarded to setup-php.                                                                                                                                                                                                       | **false**    | **string**  | `mbstring, dom, xml, xmlwriter, curl, zip, intl` |
+| **`composer-directories`** | Optional JSON array of Composer directories relative to working-directory. Empty installs the root project and tools/composer.json when present, without recursive discovery.                                                                | **false**    | **string**  | -                                                |
+| **`ignore-scripts`**       | Disable Composer installation scripts. Explicit project commands still run.                                                                                                                                                                  | **false**    | **boolean** | `true`                                           |
+| **`ignore-plugins`**       | Disable Composer plugins during installation. When false, Composer allow-plugins configuration still applies.                                                                                                                                | **false**    | **boolean** | `true`                                           |
+| **`lint`**                 | Composer lint script name or a JSON object with `command` (default `lint:ci`). Pass "false", "null" or an empty string to disable.                                                                                                           | **false**    | **string**  | `true`                                           |
+| **`test`**                 | true for defaults, a Composer script, or JSON options (command, coverage boolean, coverage-reports array, cache). false, null or empty disables tests. Only the primary runtime contributes coverage.                                        | **false**    | **string**  | `true`                                           |
+| **`package`**              | Validate a public Composer source distribution from the Git repository root.                                                                                                                                                                 | **false**    | **string**  | `false`                                          |
+|                            | Pass "false" (the default) to disable, "true" for archive and autoload checks,                                                                                                                                                               |              |             |                                                  |
+|                            | or a JSON object with `tests` for additional commands in an isolated Composer consumer.                                                                                                                                                      |              |             |                                                  |
+|                            | Quote booleans because this input has type string. Example: `{"tests":"my-cli --help"}`.                                                                                                                                                     |              |             |                                                  |
+|                            | vendor/bin is on PATH; PACKAGE_NAME, PACKAGE_INSTALL_PATH and PACKAGE_ARCHIVE_PATH identify the package.                                                                                                                                     |              |             |                                                  |
+|                            | Unknown options and non-string tests are rejected before distribution checks.                                                                                                                                                                |              |             |                                                  |
+| **`dependency-review`**    | Review dependency changes on pull requests.                                                                                                                                                                                                  | **false**    | **boolean** | `true`                                           |
+| **`report-plan`**          | Expected producer metadata supplied by reusable workflows. Leave empty for standalone use.                                                                                                                                                   | **false**    | **string**  | -                                                |
 
 <!-- inputs:end -->
 <!-- secrets:start -->
 <!-- secrets:end -->
 <!-- outputs:start -->
+
+## Outputs
+
+| **Output**        | **Description**                                                      |
+| ----------------- | -------------------------------------------------------------------- |
+| **`report-plan`** | Complete expected report plan, consumed automatically by ci-reports. |
+
 <!-- outputs:end -->
 <!-- badges:start -->
 
