@@ -12,6 +12,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
@@ -63,35 +64,36 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
             const assert = require('node:assert/strict');
             const fs = require('node:fs');
             const workflow = fs.readFileSync('.github/workflows/continuous-integration.yml', 'utf8');
-            const step = workflow.split('      - id: config\n')[1]?.split('\n  dependency-review:')[0];
-            const script = step?.split('          script: |-\n')[1]?.replace(/^ {12}/gm, '');
+            const step = workflow.split('      - id: config\n')[1]?.split('\n      - id: report-plan')[0];
+            const script = step?.split(/          script: \|[-+]?\n/)[1]?.replace(/^ {12}/gm, '');
             assert.ok(script, 'Configuration script must exist');
             const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor;
             const configure = new AsyncFunction('core', 'process', script);
             async function parse(env = {}) {
               const outputs = {};
               await configure({setOutput: (key, value) => { outputs[key] = value; }}, {
-                env: {VERSIONS: '', LINT: 'true', TEST: 'true', ...env}
+                env: {VERSIONS: '', LINT: 'true', TEST: 'true', DIRECTORY: '.', CHECKS: 'true', ...env}
               });
               return {...outputs, lint: JSON.parse(outputs.lint), test: JSON.parse(outputs.test)};
             }
             const defaults = await parse();
             assert.deepEqual(defaults.lint, {command: 'lint:ci'});
             assert.equal((await parse({LINT: '{"command":"lint:custom"}'})).lint.command, 'lint:custom');
-            assert.deepEqual(defaults.test, {command: 'test:ci', coverage: 'github', cache: ''});
+            assert.deepEqual(defaults.test, {command: 'test:ci', coverage: true, cache: '', 'coverage-reports': []});
             for (const value of ['', 'false', 'null']) {
               const config = await parse({LINT: value, TEST: value});
               assert.equal(config.lint, null);
               assert.equal(config.test, null);
             }
-            const configured = await parse({TEST: '{"command":"test:custom","coverage":"","cache":".cache"}', VERSIONS: '["8.2", "8.5"]'});
-            assert.deepEqual(configured.test, {command: 'test:custom', coverage: '', cache: '.cache'});
+            const configured = await parse({TEST: '{"command":"test:custom","coverage":false,"cache":".cache"}', VERSIONS: '["8.2", "8.5"]'});
+            assert.deepEqual(configured.test, {command: 'test:custom', coverage: false, cache: '.cache', 'coverage-reports': []});
             assert.equal(configured['primary-version'], '8.5');
             assert.equal((await parse({TEST: 'test:custom'})).test.command, 'test:custom');
             for (const name of ['LINT', 'TEST']) {
@@ -99,11 +101,17 @@ jobs:
                 await assert.rejects(() => parse({[name]: value}), undefined, name + '=' + value);
               }
             }
-            for (const test of [{coverage: false}, {coverage: 'unknown'}, {cache: '../vendor'}, {cache: '/tmp'}, {cache: '.'}]) {
+            for (const test of [{coverage: 'false'}, {coverage: 'unknown'}, {cache: '../vendor'}, {cache: '/tmp'}, {cache: '.'}]) {
               await assert.rejects(() => parse({TEST: JSON.stringify(test)}));
             }
             for (const versions of ['[]', '["8.2","8.2"]', '[8.2]', '["latest"]']) {
               await assert.rejects(() => parse({VERSIONS: versions}));
+            }
+            const native = {coverage: true, 'coverage-reports': [{file: 'custom.xml', language: 'PHP', label: 'backend'}]};
+            const nativeConfig = await parse({TEST: JSON.stringify(native)});
+            for (const [key, value] of Object.entries(native)) assert.deepEqual(nativeConfig.test[key], value);
+            for (const invalid of [{'coverage-reports': {}}, {'report-group': 'bad/group'}]) {
+              await assert.rejects(() => parse({TEST: JSON.stringify(invalid)}));
             }
             core.info('Lint/test configuration checks passed.');
 
@@ -115,7 +123,7 @@ jobs:
       id-token: write
     with:
       working-directory: tests/php-project
-      test: '{"cache":".phpunit.cache"}'
+      test: '{"cache":".phpunit.cache","coverage":true}'
       runs-on: '["ubuntu-24.04"]'
       dependency-review: false
   checks-disabled:
@@ -130,3 +138,16 @@ jobs:
       lint: must-not-run
       test: must-not-run
       package: "true"
+
+  collect-native-coverage:
+    name: Verify coverage from the primary runtime
+    needs: act
+    uses: hoverkraft-tech/ci-github-common/.github/workflows/ci-reports.yml@11c842902d003cc4ee2fa1d42f6d80bc6828461a # unified reports (PR #683, unreleased)
+    permissions:
+      contents: read
+      pull-requests: write
+      code-quality: write
+      id-token: write
+    with:
+      comment: false
+      job-results: ${{ toJSON(needs) }}

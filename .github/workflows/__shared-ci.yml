@@ -4,7 +4,7 @@ on:
 permissions: {}
 jobs:
   linter:
-    uses: hoverkraft-tech/ci-github-common/.github/workflows/linter.yml@d606f77fad305ef07dfde3db5270f5e324019c97 # 4.2.4
+    uses: hoverkraft-tech/ci-github-common/.github/workflows/linter.yml@11c842902d003cc4ee2fa1d42f6d80bc6828461a # unified reports (PR #683, unreleased)
     permissions:
       contents: read
       statuses: write
@@ -23,7 +23,9 @@ jobs:
     uses: $/.github/workflows/__test-workflow-continuous-integration.yml
     permissions:
       contents: read
+      pull-requests: write
       id-token: write
+      code-quality: write
   test-action-get-php-versions:
     uses: $/.github/workflows/__test-action-get-php-versions.yml
     permissions:

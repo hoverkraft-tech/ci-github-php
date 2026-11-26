@@ -1,6 +1,10 @@
 name: Internal - Test Composer PHP version discovery
 on:
   workflow_call:
+    outputs:
+      report-plan:
+        description: Expected native report plan.
+        value: ${{ jobs.unit.outputs.report-plan }}
 permissions: {}
 jobs:
   unit:
@@ -20,6 +24,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Arrange - Composer is the only version declaration
         run: |
           rm .php-version

@@ -20,3 +20,4 @@ jobs:
       issues: write
       packages: read
       pull-requests: write
+      code-quality: write
