@@ -19,7 +19,7 @@
     }
   },
   "scripts": {
-    "lint:ci": "tools/vendor/bin/phpstan analyse src --level=max --no-progress --error-format=github",
+    "lint:ci": "tools/vendor/bin/phpstan analyse src --level=max --no-progress --error-format=checkstyle > phpstan-checkstyle.xml",
     "test": "phpunit",
     "post-install-cmd": "@php -r \"file_put_contents('install-hook.txt', 'hook executed');\"",
     "post-update-cmd": "@post-install-cmd",

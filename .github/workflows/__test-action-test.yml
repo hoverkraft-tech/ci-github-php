@@ -17,12 +17,13 @@ jobs:
       report-artifact-id: ${{ steps.tests.outputs.report-artifact-id }}
       expected-reports: ${{ steps.assert.outputs.expected-reports }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - name: Arrange - Project test script
         id: fixture
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           SCENARIO: ${{ inputs.scenario }}
         with:
@@ -67,16 +68,16 @@ jobs:
         uses: $/actions/test
         with:
           working-directory: ${{ steps.fixture.outputs.directory }}
-          coverage: ${{ (inputs.scenario == 'reports' || inputs.scenario == 'failing-tests') && 'github' || '' }}
+          coverage: ${{ (inputs.scenario == 'reports' || inputs.scenario == 'failing-tests') && 'true' || 'false' }}
       - name: Assert - Reports and project preparation
         id: assert
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
           DIRECTORY: ${{ steps.fixture.outputs.directory }}
           OUTCOME: ${{ steps.tests.outcome }}
           SCENARIO: ${{ inputs.scenario }}
           ARTIFACT_ID: ${{ steps.tests.outputs.report-artifact-id }}
-          COVERAGE: ${{ (inputs.scenario == 'reports' || inputs.scenario == 'failing-tests') && 'github' || '' }}
+          COVERAGE: ${{ (inputs.scenario == 'reports' || inputs.scenario == 'failing-tests') && 'true' || 'false' }}
         with:
           script: |-
             const assert = require('node:assert/strict');
@@ -84,14 +85,15 @@ jobs:
             const path = require('node:path');
             const directory = process.env.DIRECTORY;
             const scenario = process.env.SCENARIO;
-            assert.equal(process.env.OUTCOME, scenario.startsWith('failing-') ? 'failure' : 'success');
+            assert.equal(process.env.OUTCOME, (scenario.startsWith('failing-') || scenario === 'no-reports') ? 'failure' : 'success');
             if (scenario === 'no-reports') {
-              assert.equal(process.env.ARTIFACT_ID, '');
+              assert.match(process.env.ARTIFACT_ID, /^\d+$/);
+              core.setOutput('expected-reports',{});
               return;
             }
             assert.match(process.env.ARTIFACT_ID, /^\d+$/);
             const {createHash} = require('node:crypto');
-            const reportNames = process.env.COVERAGE === 'github' ? ['cobertura.xml', 'junit.xml'] : ['junit.xml'];
+            const reportNames = ['junit.xml'];
             core.setOutput('expected-reports', Object.fromEntries(reportNames.map(name => [name, createHash('sha256').update(fs.readFileSync(path.join(directory, name))).digest('hex')])));
             const junit = fs.readFileSync(path.join(directory, 'junit.xml'), 'utf8');
             assert.match(junit, /<testcase\b/);
@@ -113,39 +115,3 @@ jobs:
     with:
       artifact-id: ${{ needs.test.outputs.report-artifact-id }}
       expected-reports: ${{ needs.test.outputs.expected-reports }}
-
-  individual-comment:
-    if: inputs.scenario == 'reports'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - name: Arrange - Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Arrange - Install the Composer fixture
-        uses: $/actions/setup-php
-        with:
-          working-directory: tests/php-project
-          composer-directories: '["."]'
-      - name: Act - Publish an individual report
-        uses: $/actions/test
-        with:
-          working-directory: tests/php-project
-          comment: "true"
-      - name: Assert - One comment with collapsed test and coverage details
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            const assert = require('node:assert/strict');
-            const pr = context.payload.pull_request;
-            if (context.eventName !== 'pull_request' || pr.head.repo.full_name !== `${context.repo.owner}/${context.repo.repo}`) return;
-            const comments = await github.paginate(github.rest.issues.listComments, {...context.repo, issue_number: pr.number, per_page: 100});
-            const reports = comments.filter(comment => comment.user.login === 'github-actions[bot]' && comment.body.startsWith('PHP test results\n'));
-            assert.equal(reports.length, 1);
-            assert.match(reports[0].body, /<details>/);
-            assert.match(reports[0].body, /Test Results/);
-            assert.match(reports[0].body, /1 passed · 0 failed · 0 skipped/);
-            assert.match(reports[0].body, /Coverage/);

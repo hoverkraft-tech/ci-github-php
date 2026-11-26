@@ -33,7 +33,10 @@ jobs:
             const path = require('node:path');
             const {createHash} = require('node:crypto');
             const expected = JSON.parse(process.env.EXPECTED_REPORTS);
-            const files = await (await glob.create('downloaded-reports/**/*', {matchDirectories: false})).glob();
+            const manifest=JSON.parse(fs.readFileSync('downloaded-reports/ci-report.json','utf8'));
+            const files=manifest.files.filter(file=>!['coverage','attachment'].includes(file.type)).map(file=>path.join('downloaded-reports',file.file));
+            assert.equal(fs.existsSync('downloaded-reports/.private-fixture'),false);
+            assert.equal(manifest.errors.length > 0,Object.keys(expected).length === 0 || manifest.errors.some(error=>error.includes('parsing')));
             assert.deepEqual(files.map(file => path.basename(file)).sort(), Object.keys(expected).sort());
             for (const file of files) {
               assert.equal(createHash('sha256').update(fs.readFileSync(file)).digest('hex'), expected[path.basename(file)]);
