@@ -6,6 +6,15 @@ description: |
   including after command failures. Only parsed report files are uploaded.
   Keep `comment: false` and call the common `ci-reports` workflow after producer
   jobs for consolidated comments with collapsed details.
+
+  Native `coverage: github-code-quality` prepares Cobertura artifacts for the common
+  [CI reports workflow](https://github.com/hoverkraft-tech/ci-github-common/blob/main/.github/workflows/ci-reports.md)
+  and its opt-in publication workflow. Set `report-group` to the outer calling job
+  and list every expected component in the collector. The default label is the
+  repository-relative working directory, or `root`. Multiple reports need explicit
+  stable labels. Reports must measure the PR head commit, not the PR merge commit.
+  Keep merge-result validation separately when required. No upload permission is
+  needed in this test action; only the publication job needs `code-quality: write`.
 author: hoverkraft
 branding:
   icon: package
@@ -28,15 +37,28 @@ inputs:
       Omit coverage arguments when collection is not needed. The coverage input controls publication only.
       See the [CI guide](../../.github/workflows/continuous-integration.md).
     default: test:ci
+  coverage-reports:
+    description: |
+      Native GitHub coverage reports as a JSON array of file, language and optional label.
+      Empty uses cobertura.xml; multiple reports require explicit unique labels.
+      Every file must be Cobertura XML produced by the test command. Paths are relative
+      to working-directory. Example: [{"file":"coverage.xml","language":"PHP","label":"backend"}].
+    default: ""
   coverage:
-    description: "Coverage destination: `github` for report parsing, `codecov` for OIDC upload, or empty to disable coverage publication. Coverage files must be produced by the test command."
+    description: "Coverage destination: `github` for summaries, `github-code-quality` for native coverage artifacts, `codecov` for OIDC upload, or empty to disable coverage publication. Coverage files must be produced by the test command."
     default: github
+  report-group:
+    description: Outer calling job ID for consolidated reports. Defaults to the current job ID.
+    default: ""
   comment:
     description: Publish an individual test and coverage PR comment. Requires pull-requests write permission. Fork comments are disabled. Leave false for consolidated reporting; annotations, summaries and artifacts remain enabled.
     default: "false"
 outputs:
+  native-coverage-artifact-id:
+    description: Cobertura artifact for native GitHub publication, empty unless github-code-quality is selected.
+    value: ${{ steps.native-coverage.outputs.artifact-id }}
   report-artifact-id:
-    description: Native report artifact ID, empty when no supported reports were parsed. Coverage is included only in GitHub mode.
+    description: Native report artifact ID, empty when no supported reports were parsed. Coverage is included for `github` and `github-code-quality`.
     value: ${{ steps.upload-reports.outputs.artifact-id }}
 runs:
   using: composite
@@ -45,12 +67,12 @@ runs:
       uses: hoverkraft-tech/ci-github-common/actions/working-directory@d606f77fad305ef07dfde3db5270f5e324019c97 # 4.2.4
       with:
         working-directory: ${{ inputs.working-directory }}
-    - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+    - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
         COVERAGE: ${{ inputs.coverage }}
       with:
         script: |-
-          if (!['', 'github', 'codecov'].includes(process.env.COVERAGE)) throw new Error('coverage must be github, codecov or empty.');
+          if (!['', 'github', 'github-code-quality', 'codecov'].includes(process.env.COVERAGE)) throw new Error('coverage must be github, github-code-quality, codecov or empty.');
     - id: run
       uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
@@ -68,11 +90,11 @@ runs:
       uses: hoverkraft-tech/ci-github-common/actions/quality/parse-ci-reports@d606f77fad305ef07dfde3db5270f5e324019c97 # 4.2.4
       with:
         working-directory: ${{ steps.directory.outputs.absolute-path }}
-        report-paths: ${{ inputs.coverage == 'github' && 'auto:test,auto:coverage' || 'auto:test' }}
+        report-paths: ${{ (inputs.coverage == 'github' || inputs.coverage == 'github-code-quality') && 'auto:test,auto:coverage' || 'auto:test' }}
         report-name: PHP tests
         output-format: annotations,summary,markdown
     - name: Publish individual report comment
-      if: ${{ !cancelled() && inputs.comment == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && (steps.reports.outputs.test-markdown != '' || steps.reports.outputs.coverage-markdown != '') }}
+      if: ${{ !cancelled() && inputs.comment == 'true' && inputs.coverage != 'github-code-quality' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && (steps.reports.outputs.test-markdown != '' || steps.reports.outputs.coverage-markdown != '') }}
       uses: hoverkraft-tech/ci-github-common/actions/create-or-update-comment@d606f77fad305ef07dfde3db5270f5e324019c97 # 4.2.4
       with:
         title: PHP test results
@@ -85,16 +107,20 @@ runs:
       uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
         REPORT_FILES: ${{ steps.reports.outputs.parsed-files }}
+        REPORT_GROUP: ${{ inputs.report-group || github.job }}
       with:
         script: |
           core.setOutput('files', JSON.parse(process.env.REPORT_FILES).join('\n'));
+          const group = process.env.REPORT_GROUP;
+          if (!/^[\w-]+$/.test(group)) throw new Error('report-group must be a job ID.');
+          core.setOutput('group', group);
           core.setOutput('id', require('node:crypto').randomUUID());
     - name: Upload native test and coverage reports
       id: upload-reports
       if: ${{ !cancelled() && steps.report-artifact.outputs.files != '' }}
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
-        name: ci-reports-${{ github.run_attempt }}-${{ github.job }}-${{ steps.report-artifact.outputs.id }}
+        name: ci-reports-${{ github.run_attempt }}-${{ steps.report-artifact.outputs.group }}-${{ steps.report-artifact.outputs.id }}
         path: ${{ steps.report-artifact.outputs.files }}
         include-hidden-files: true
         if-no-files-found: error
@@ -140,3 +166,12 @@ runs:
         working-directory: ${{ steps.directory.outputs.absolute-path }}
         files: ${{ steps.coverage-reports.outputs.files }}
         fail-ci-if-error: "true"
+
+    - name: Prepare native GitHub coverage
+      id: native-coverage
+      if: ${{ !cancelled() && steps.run.outcome != 'skipped' && inputs.coverage == 'github-code-quality' }}
+      uses: hoverkraft-tech/ci-github-common/actions/quality/coverage-reports@71ce8b3ff53d6673617b19fa01d6637c916d4948 # coverage support (PR #683, unreleased)
+      with:
+        working-directory: ${{ steps.directory.outputs.absolute-path }}
+        report-group: ${{ inputs.report-group || github.job }}
+        reports: ${{ inputs.coverage-reports || '[{"file":"cobertura.xml","language":"PHP"}]' }}

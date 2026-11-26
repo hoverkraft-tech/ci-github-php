@@ -84,14 +84,14 @@ jobs:
             const defaults = await parse();
             assert.deepEqual(defaults.lint, {command: 'lint:ci'});
             assert.equal((await parse({LINT: '{"command":"lint:custom"}'})).lint.command, 'lint:custom');
-            assert.deepEqual(defaults.test, {command: 'test:ci', coverage: 'github', cache: ''});
+            assert.deepEqual(defaults.test, {command: 'test:ci', coverage: 'github', cache: '', 'coverage-reports': [], 'report-group': ''});
             for (const value of ['', 'false', 'null']) {
               const config = await parse({LINT: value, TEST: value});
               assert.equal(config.lint, null);
               assert.equal(config.test, null);
             }
             const configured = await parse({TEST: '{"command":"test:custom","coverage":"","cache":".cache"}', VERSIONS: '["8.2", "8.5"]'});
-            assert.deepEqual(configured.test, {command: 'test:custom', coverage: '', cache: '.cache'});
+            assert.deepEqual(configured.test, {command: 'test:custom', coverage: '', cache: '.cache', 'coverage-reports': [], 'report-group': ''});
             assert.equal(configured['primary-version'], '8.5');
             assert.equal((await parse({TEST: 'test:custom'})).test.command, 'test:custom');
             for (const name of ['LINT', 'TEST']) {
@@ -105,6 +105,12 @@ jobs:
             for (const versions of ['[]', '["8.2","8.2"]', '[8.2]', '["latest"]']) {
               await assert.rejects(() => parse({VERSIONS: versions}));
             }
+            const native = {coverage: 'github-code-quality', 'report-group': 'backend', 'coverage-reports': [{file: 'custom.xml', language: 'PHP', label: 'backend'}]};
+            const nativeConfig = await parse({TEST: JSON.stringify(native)});
+            for (const [key, value] of Object.entries(native)) assert.deepEqual(nativeConfig.test[key], value);
+            for (const invalid of [{'coverage-reports': {}}, {'report-group': 'bad/group'}]) {
+              await assert.rejects(() => parse({TEST: JSON.stringify(invalid)}));
+            }
             core.info('Lint/test configuration checks passed.');
 
   act:
@@ -115,7 +121,7 @@ jobs:
       id-token: write
     with:
       working-directory: tests/php-project
-      test: '{"cache":".phpunit.cache"}'
+      test: '{"cache":".phpunit.cache","coverage":"github-code-quality","report-group":"act"}'
       runs-on: '["ubuntu-24.04"]'
       dependency-review: false
   checks-disabled:
@@ -130,3 +136,15 @@ jobs:
       lint: must-not-run
       test: must-not-run
       package: "true"
+
+  collect-native-coverage:
+    name: Verify coverage from the primary runtime
+    needs: act
+    uses: hoverkraft-tech/ci-github-common/.github/workflows/ci-reports.yml@71ce8b3ff53d6673617b19fa01d6637c916d4948 # coverage support (PR #683, unreleased)
+    permissions:
+      contents: read
+      pull-requests: write
+    with:
+      comment: false
+      job-results: ${{ toJSON(needs) }}
+      coverage-reports: '[{"job":"act","label":"tests/php-project"}]'

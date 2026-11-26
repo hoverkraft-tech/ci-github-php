@@ -23,6 +23,7 @@ jobs:
     uses: $/.github/workflows/__test-workflow-continuous-integration.yml
     permissions:
       contents: read
+      pull-requests: write
       id-token: write
   test-action-get-php-versions:
     uses: $/.github/workflows/__test-action-get-php-versions.yml
