@@ -3,6 +3,6 @@
   "description": "Independent Composer tooling fixture",
   "license": "MIT",
   "require-dev": {
-    "phpstan/phpstan": "^2.1"
+    "phpstan/phpstan": "^2.3"
   }
 }
