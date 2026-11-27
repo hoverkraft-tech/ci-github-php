@@ -40,7 +40,7 @@ runs:
   using: composite
   steps:
     - id: directory
-      uses: hoverkraft-tech/ci-github-common/actions/working-directory@d606f77fad305ef07dfde3db5270f5e324019c97 # 4.2.4
+      uses: hoverkraft-tech/ci-github-common/actions/working-directory@f165c0ca3e88604611481e1408ace1e0e3a5ee47 # 4.3.1
       with:
         working-directory: ${{ inputs.working-directory }}
     - id: run
@@ -58,7 +58,7 @@ runs:
     - name: Report lint results
       id: reports
       if: ${{ !cancelled() && steps.directory.outcome == 'success' }}
-      uses: hoverkraft-tech/ci-github-common/actions/quality/parse-ci-reports@d606f77fad305ef07dfde3db5270f5e324019c97 # 4.2.4
+      uses: hoverkraft-tech/ci-github-common/actions/quality/parse-ci-reports@f165c0ca3e88604611481e1408ace1e0e3a5ee47 # 4.3.1
       with:
         working-directory: ${{ steps.directory.outputs.absolute-path }}
         report-paths: auto:lint
@@ -66,7 +66,7 @@ runs:
         output-format: annotations,summary,markdown
     - name: Publish individual report comment
       if: ${{ !cancelled() && inputs.comment == 'true' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && steps.reports.outputs.lint-markdown != '' }}
-      uses: hoverkraft-tech/ci-github-common/actions/create-or-update-comment@d606f77fad305ef07dfde3db5270f5e324019c97 # 4.2.4
+      uses: hoverkraft-tech/ci-github-common/actions/create-or-update-comment@f165c0ca3e88604611481e1408ace1e0e3a5ee47 # 4.3.1
       with:
         title: PHP lint results
         body: ${{ steps.reports.outputs.lint-markdown }}
